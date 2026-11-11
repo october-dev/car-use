@@ -1,12 +1,33 @@
 <div align="center">
-
-# car-use
-
-**Let your agent use your car.**
-
-Claude Code, Codex, OpenClaw, Hermes, or any agent with a shell can read, diagnose and understand a real car through a $15 OBD-II adapter. Without a car, they can use the built-in virtual one.
-
+  <a href="https://github.com/october-dev/car-use">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+      <img src="assets/logo-light.svg" alt="car-use" width="560">
+    </picture>
+  </a>
+  <br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/tagline-dark.svg">
+    <img src="assets/tagline-light.svg" alt="Let your agent use your car." width="520">
+  </picture>
 </div>
+
+---
+
+<p>
+  <a href="#setup"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-setup-dark.svg"><img src="assets/button-setup-light.svg" height="40" align="top" alt="Setup"></picture></a>
+  <a href="SKILL.md"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-skill-dark.svg"><img src="assets/button-skill-light.svg" height="40" align="top" alt="Skill"></picture></a>
+  <a href="#try-it-without-a-car"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-sim-dark.svg"><img src="assets/button-sim-light.svg" height="40" align="top" alt="Virtual car"></picture></a>
+  <a href="#try-it-without-a-car"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/callout-dark.svg"><img src="assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
+</p>
+
+---
+
+Enable Claude Code, Codex, OpenClaw, Hermes, or any agent with a shell to read, diagnose and understand a real car through a $15 OBD-II adapter. No app on the car, no cloud account, no dependencies beyond Python.
+
+> **Any car since 1996 (US) / 2001 (EU) / 2020 (India)** through a Wi-Fi or USB OBD-II adapter, clones included <br/>
+> **A virtual car** with real faults to diagnose when there is no car nearby <br/>
+> **Coming:** Bluetooth adapters, CAN sniffing, TunerStudio ECUs, carmaker APIs
 
 ```
   ● you: the check-engine light came on this morning
@@ -21,8 +42,6 @@ Claude Code, Codex, OpenClaw, Hermes, or any agent with a shell can read, diagno
   │        an exhaust leak before the rear O2 sensor, then the converter.
   ✓ done
 ```
-
-No app to install on the car, no cloud account, and no dependencies beyond Python.
 
 ---
 
