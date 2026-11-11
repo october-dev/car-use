@@ -15,35 +15,36 @@
 ---
 
 <p>
+  <a href="https://car-use.dev"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-site-dark.svg"><img src="assets/button-site-light.svg" height="40" align="top" alt="Website"></picture></a>
   <a href="#setup"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-setup-dark.svg"><img src="assets/button-setup-light.svg" height="40" align="top" alt="Setup"></picture></a>
   <a href="SKILL.md"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-skill-dark.svg"><img src="assets/button-skill-light.svg" height="40" align="top" alt="Skill"></picture></a>
-  <a href="#try-it-without-a-car"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-sim-dark.svg"><img src="assets/button-sim-light.svg" height="40" align="top" alt="Virtual car"></picture></a>
-  <a href="#try-it-without-a-car"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/callout-dark.svg"><img src="assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
+  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-sim-dark.svg"><img src="assets/button-sim-light.svg" height="40" align="top" alt="Virtual car"></picture></a>
+  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/callout-dark.svg"><img src="assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
 </p>
 
 ---
 
-Enable Claude Code, Codex, OpenClaw, Hermes, or any agent with a shell to read, diagnose and understand a real car through a $15 OBD-II adapter. No app on the car, no cloud account, no dependencies beyond Python.
+Your AI agent can read your car's error codes, check its sensors and tell you what's wrong. All you need is a $15 plug-in adapter. No car nearby? Use a virtual one.
 
-> **Any car since 1996 (US) / 2001 (EU) / 2020 (India)** through a Wi-Fi or USB OBD-II adapter, clones included <br/>
-> **A virtual car** with real faults to diagnose when there is no car nearby <br/>
-> **Coming:** Bluetooth adapters, CAN sniffing, TunerStudio ECUs, carmaker APIs
+Works with Claude Code, Codex, OpenClaw, Hermes and any AI agent that can run a command.
 
-```
-  ● you: the check-engine light came on this morning
-  │
-  ● dtcs()          → P0420  Catalyst system efficiency below threshold, bank 1
-  ● freeze_frame()  → set at 2210 rpm, 72 km/h, fuel trims normal
-  ● watch(["o2_b1s1", "o2_b1s2"], seconds=10)
-  │                 → downstream O2 switches 15×/10s, same as upstream
-  │
-  ● agent: the catalyst isn't storing oxygen. Fuel trims are normal, so
-  │        this isn't a sensor or mixture problem upstream. Next check:
-  │        an exhaust leak before the rear O2 sensor, then the converter.
-  ✓ done
-```
+> **Cars:** any car since 1996 (US), 2001 (EU) or 2020 (India), with almost any OBD-II adapter <br/>
+> **Motorsport:** race cars, karts, project cars and Formula Student cars <br/>
+> **More than cars:** cranes, diggers, generators and trucks, in one chat <br/>
+> **Car to car:** your cars talk to each other and sort things out <br/>
+> **car-use Cloud:** give every car its own always-on AI brain ([early access](https://car-use.dev/#cloud))
 
----
+## Check engine light? Ask your agent.
+
+**You:** My check engine light came on this morning. What's wrong?
+
+| The agent… | What it found |
+| --- | --- |
+| reads the error code · `dtcs()` | **P0420**: the catalytic converter isn't working well |
+| checks when it happened · `freeze_frame()` | At 2,210 rpm and 72 km/h. The fuel mix was normal. |
+| watches both oxygen sensors · `watch(o2)` | The rear one copies the front one. On a healthy car it stays steady. |
+
+**Agent:** Most likely a worn-out catalytic converter. Have a mechanic check for an exhaust leak before the rear sensor first. If there isn't one, the converter needs replacing.
 
 ## Setup
 
@@ -53,147 +54,125 @@ Paste this into your agent:
 Install car-use with `uv tool install git+https://github.com/october-dev/car-use`, run `car-use skill` and follow it, then read https://github.com/october-dev/car-use/blob/main/onboarding.md and walk me through it.
 ```
 
-The agent installs the CLI, learns the helpers from the skill, shows you a simulated diagnosis first, and then walks you through plugging in your adapter. Plugging in and turning the key are always your job.
-
-### Try it without a car
-
-```bash
-uv tool install git+https://github.com/october-dev/car-use
-
-car-use scenarios                 # virtual cars with real faults
-car-use --sim p0420 <<'PY'
-print(dtcs())
-print(freeze_frame())
-print(watch(["o2_b1s1", "o2_b1s2"], seconds=10))
-PY
-```
+Your agent installs car-use, learns how to use it, shows you a practice diagnosis on a virtual car, then helps you plug in your adapter. You do the plugging in and turning the key. The agent does the rest.
 
 ### Use your car
 
 1. Plug an OBD-II adapter into the port under the dashboard and turn the ignition on.
-2. Point car-use at it:
+2. Tell car-use where the adapter is:
 
 ```bash
-car-use config set device tcp://192.168.0.10:35000                       # Wi-Fi adapter (join its network first)
+car-use config set device tcp://192.168.0.10:35000                       # Wi-Fi adapter (join its Wi-Fi first)
 car-use config set device "serial:///dev/cu.usbserial-XXXX?baud=38400"   # USB adapter (needs car-use[serial])
 
-car-use doctor          # is everything connected? names the one fix if not
-car-use dongle-doctor   # what is this adapter really? graded A-D
+car-use doctor          # is everything connected? tells you the one fix if not
+car-use dongle-doctor   # what adapter did you actually buy? graded A to D
 ```
 
-## Usage
+## No car? Use a virtual one.
 
-Agents (and you) pipe Python in. Helpers are pre-imported:
+Pretend cars with real problems to solve. Pick one and let your agent work out what's wrong:
+
+```bash
+uv tool install git+https://github.com/october-dev/car-use
+car-use --sim p0420 <<'PY'
+print(dtcs())
+print(watch(["o2_b1s1", "o2_b1s2"], seconds=10))
+PY
+```
+
+| Car | What's wrong | Difficulty |
+| --- | --- | --- |
+| `p0420` | Worn-out catalytic converter. The rear oxygen sensor copies the front one. | Medium |
+| `p0171` | Air leak. Fuel correction is high at idle and normal when driving. | Medium |
+| `p0300` | Engine misfire. Shaky idle, two cylinders acting up. | Hard |
+| `cleared-codes` | The seller cleared the codes. Looks clean, but the self-checks haven't finished. | Tricky |
+| `dying-battery` | Battery not charging. Voltage keeps dropping while the engine runs. | Easy |
+| `healthy` | Nothing wrong. Use it to see what normal looks like. | Easy |
+| `ignition-off` | The adapter has power but the car doesn't answer. | Easy |
+
+Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
+
+## How agents use it
+
+Your agent sends short Python scripts. The helpers are already loaded:
 
 ```bash
 car-use <<'PY'
-print(car().describe())          # VIN, adapter, protocol
-print(vin_info())                # model year, manufacturer, check digit
-print(dtcs())                    # stored / pending / permanent + descriptions
-print(readiness())               # emissions monitors, distance since codes cleared
+print(car().describe())          # which car and adapter
+print(vin_info())                # model year, maker
+print(dtcs())                    # error codes, explained
+print(readiness())               # the car's self-checks, and how long since codes were cleared
 print(read_many(["rpm", "coolant", "ltft1", "battery"]))
 PY
 ```
 
-| Helper | What it returns |
+| Helper | What it gives you |
 | --- | --- |
-| `car()` | The connected vehicle. `.describe()` gives a summary |
-| `manifest()` | What this car + backend can observe and do, by altitude and tier |
-| `signals(prefix)` | Live signals this car supports: alias, [VSS](https://covesa.github.io/vehicle_signal_specification/) path, unit |
-| `read(name)` / `read_many(names)` | Readings by alias (`"rpm"`), VSS path (`"Vehicle.Speed"`) or PID (`"010C"`) |
-| `watch(names, seconds, hz)` | A time series with min, max, mean, stdev and switch rate per signal |
-| `dtcs()` | Trouble codes, generic descriptions, MIL state |
-| `freeze_frame()` | The conditions the ECU saved when the code set |
-| `readiness()` | Monitor status, and distance and warm-ups since codes were cleared |
-| `vin_info()` | Offline VIN decode |
-| `raw_obd("221E12")` | Read-only raw requests, for exploring manufacturer data |
-| `clear_dtcs()` | Clears codes. Needs your permission (see [Safety](#safety)) |
-| `dongle_doctor()` | Identifies the adapter, finds missing commands, measures throughput, grades it |
+| `car()` | The connected car. `.describe()` gives a summary |
+| `manifest()` | Everything this car can report and do |
+| `signals()` | The live readings this car supports, with names and units |
+| `read(name)` / `read_many(names)` | One or more readings, e.g. `"rpm"`, `"Vehicle.Speed"` |
+| `watch(names, seconds)` | Readings over time, with min, max, average and how often they swing |
+| `dtcs()` | Error codes in plain English, and whether the check engine light is on |
+| `freeze_frame()` | What the car was doing when the code appeared |
+| `readiness()` | The car's emissions self-checks, and distance since codes were cleared |
+| `vin_info()` | Decodes the VIN |
+| `raw_obd("221E12")` | Read-only requests for maker-specific data |
+| `clear_dtcs()` | Clears codes, only with your OK (see [Safety](#safe-by-default)) |
+| `dongle_doctor()` | Tests your adapter and grades it |
 
-Signals use COVESA VSS names, so agents learn one vocabulary that will carry across adapters, CAN buses and carmaker APIs.
+Readings use standard [COVESA VSS](https://covesa.github.io/vehicle_signal_specification/) names, so your agent learns one set of names that works across adapters, cars and makers.
 
-## Virtual cars
+## What it works with
 
-Each scenario behaves the way the real fault does on a real car, so an agent has to actually reason through it:
+| | Today | Coming |
+| --- | --- | --- |
+| **Adapters** | Wi-Fi and USB ELM327 (clones too), OBDLink | Bluetooth adapters, CAN adapters (CANable, PCAN, comma panda) |
+| **Cars** | OBD-II cars, petrol and diesel, CAN and older protocols | Maker-specific data packs, EV battery data, Tesla, Smartcar |
+| **Motorsport** | Any car with an OBD port | TunerStudio ECUs (Speeduino, rusEFI, MegaSquirt), Haltech, Link and ECUMaster data, lap coaching |
+| **More than cars** | | Cranes, diggers, generators and trucks (J1939), GPS trackers, makers' fleet systems |
+| **Agents** | Claude Code, Codex, any agent with a shell | MCP server, OpenClaw and Hermes plugins, [car to car](https://agentintercom.org) |
 
-| Scenario | What's going on |
-| --- | --- |
-| `p0420` | Dead catalyst: the downstream O2 sensor mirrors the upstream one |
-| `p0171` | Lean at idle, normal under load: a vacuum leak |
-| `p0300` | Random misfire, unsteady idle, cylinder codes pending |
-| `cleared-codes` | No codes, but monitors incomplete after 11 km. A seller cleared them |
-| `dying-battery` | System voltage falling with the engine running: the charging system |
-| `ignition-off` | The adapter has power but the car doesn't answer |
-| `healthy` | A normal car, for comparison |
-
-Scenarios also choose the adapter: a genuine ELM327, a typical clone (reports "v1.5", drops commands, slower), or an STN-based OBDLink. Run one as a network adapter with `car-use sim p0171 --port 35000` and point any OBD app at it.
-
-Write your own as TOML in `~/.car-use/scenarios/`.
-
-## Adapters
-
-Most "ELM327" adapters sold online are clones of old firmware. They report versions that never existed and silently drop commands. car-use's driver is written for them, and `car-use dongle-doctor` tells you what you actually bought:
+Most "ELM327" adapters sold online are cheap clones that pretend to be a newer version. car-use is built for them, and `car-use dongle-doctor` tells you what you really bought:
 
 ```
 grade C · clone · basic reads work but slow or limited (15.7/s, 12 AT commands missing)
 ```
 
-| Works today | Coming |
-| --- | --- |
-| Wi-Fi ELM327 / clones, USB ELM327, OBDLink (STN) over USB | Bluetooth LE adapters, CAN adapters (CANable, PCAN, panda), TunerStudio-protocol ECUs (Speeduino, rusEFI, MegaSquirt) |
+Tip: don't leave a cheap adapter plugged in overnight. Many never sleep and drain the battery.
 
-Tip: don't leave a cheap adapter plugged into a parked car overnight. Many never sleep and drain the battery.
+## What's next
 
-## Safety
+| | | |
+| --- | --- | --- |
+| **Read** | Error codes, sensors, history | Today |
+| **Do small things** | Turn on the AC, lock the doors, clear codes. Only with your OK. | Today |
+| **Change settings** | Send a destination, set a charge limit | Today |
+| **Drive somewhere** | "Go pick me up," when car makers allow it | Future |
+| **Book a ride** | Book a robotaxi for you or your family | Future |
 
-A phone harness can send the wrong message. A car harness touches something with brakes. car-use is read-only by default, and anything else goes through a kernel that denies by default:
+Every part of car-use says what it can see and do. When a car maker or robotaxi company opens up an API, it plugs straight in.
 
-- **Raw requests are limited to read services.** Coding, actuation, security access and flashing are refused, whatever the agent sends.
-- **Changing something needs you.** Clearing codes needs the owner to enable it per vehicle at a real terminal, and to confirm each time after being told what it costs. An agent can't enable it for you.
-- **There's an audit trail.** Every decision is written to a hash-chained log. `car-use audit --verify` detects edits.
-- **Hard lines:** no emissions defeats, odometer changes, immobiliser or key work, or control of a moving car.
+## Safe by default
 
-## How it works
+car-use can only read your car unless you allow more. It can never touch the brakes, steering or anything risky.
 
-```
- agent ──► car-use <<'PY' … PY ──► helpers ──► kernel (policy, tiers, audit)
-                                      │
-                                      ▼
-                   vehicle model (VSS signals, capabilities)
-                                      │
-               ┌──────────────┬───────┴───────┬────────────────┐
-             OBD-II          sim          CAN (soon)     carmaker APIs (later)
-          ELM327 / STN    virtual car
-```
-
-Each backend publishes a manifest of what it can observe and do. Actions are sorted by altitude:
-
-| Altitude | Covers |
-| --- | --- |
-| A0 | Reading |
-| A1 | Comfort and access |
-| A2 | Setpoints |
-| A3 | Missions, carried out by a carmaker's own certified driving system |
-| A4 | Mobility services |
-
-New interfaces (a carmaker API, a robotaxi platform) plug in as new backends, not a redesign.
+- **Read-only to start.** It can look at your car's data but can't change anything. Coding, flashing and controlling parts are always refused.
+- **You stay in control.** Nothing changes unless you switch it on yourself, at your own computer, and say yes each time. Your agent can't do that for you.
+- **Everything is logged.** Every action goes into a log that can't be secretly edited. Check it with `car-use audit --verify`.
+- **Never allowed.** Turning off emissions systems, changing the odometer, messing with keys, or driving the car.
 
 ## Roadmap
 
-- [x] OBD-II reads, ELM327/STN driver, virtual cars, dongle doctor, kernel + audit
-- [ ] Bluetooth LE adapters
-- [ ] CAN sniffing with agent-assisted reverse engineering ("find the CAN ID for my door lock")
-- [ ] Agent-built live dashboards
-- [ ] TunerStudio-protocol ECUs, plus Haltech / Link / ECUMaster data streams
-- [ ] Manufacturer data packs (Mode 22), always-on in-car logging, MCP server
-- [ ] Carmaker APIs (Tesla, Smartcar, Home Assistant)
+Built in the open. See the [Roadmap](https://github.com/october-dev/car-use/issues/23) for what's being worked on and what's next.
 
 ## Contributing
 
-Issues and PRs welcome, especially:
+The most useful things right now:
 - `dongle-doctor` reports from adapters you own;
-- scenarios for faults you've diagnosed;
-- manufacturer PIDs for your car.
+- virtual cars for problems you've fixed;
+- maker-specific data for your car.
 
 ```bash
 git clone https://github.com/october-dev/car-use && cd car-use
@@ -202,4 +181,4 @@ uv sync && uv run pytest
 
 ## License
 
-MIT © October
+MIT © [October](https://github.com/october-dev) · [car-use.dev](https://car-use.dev)

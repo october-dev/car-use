@@ -102,6 +102,7 @@ def button(label: str, icon: str, t: dict, filled: bool, width: int) -> str:
 
 ICON_BOOK = '<path d="M1 2h6a3 3 0 0 1 3 3v11a2 2 0 0 0-2-2H1z"/><path d="M19 2h-6a3 3 0 0 0-3 3v11a2 2 0 0 1 2-2h7z"/>'
 ICON_CAR = '<path d="M2 11l2-6h12l2 6"/><rect x="1" y="11" width="18" height="4" rx="1"/><circle cx="5" cy="16" r="1"/><circle cx="15" cy="16" r="1"/>'
+ICON_GLOBE = '<circle cx="10" cy="9" r="8"/><path d="M2 9h16M10 1c2.5 2.5 3.5 5 3.5 8s-1 5.5-3.5 8M10 1C7.5 3.5 6.5 6 6.5 9s1 5.5 3.5 8"/>'
 ICON_TERM = '<rect x="1" y="1" width="18" height="15" rx="2"/><path d="M5 6l3 3-3 3M10 12h5"/>'
 
 
@@ -125,14 +126,15 @@ def main() -> None:
         files = {
             f"logo-{theme}.svg": logo(args.name, t),
             f"tagline-{theme}.svg": tagline(t),
+            f"button-site-{theme}.svg": button("Website", ICON_GLOBE, t, True, 132),
             f"button-setup-{theme}.svg": button("Setup", ICON_TERM, t, False, 112),
             f"button-skill-{theme}.svg": button("Skill", ICON_BOOK, t, False, 104),
-            f"button-sim-{theme}.svg": button("Virtual car", ICON_CAR, t, True, 148),
+            f"button-sim-{theme}.svg": button("Virtual car", ICON_CAR, t, False, 148),
             f"callout-{theme}.svg": callout(t),
         }
         for fname, body in files.items():
             (out / fname).write_text(body, encoding="utf-8")
-    print(f"wrote {len(THEMES) * 6} files to {out}")
+    print(f"wrote {len(THEMES) * 7} files to {out}")
 
 
 if __name__ == "__main__":
