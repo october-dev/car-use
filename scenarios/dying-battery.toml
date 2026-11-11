@@ -1,0 +1,30 @@
+notes = """Charging system problem. Engine running but system voltage sits around
+12.2 V and slowly falls; a healthy alternator holds 13.8-14.6 V. P0562
+(system voltage low) is stored. Suspect the alternator or its belt/connection
+before the battery itself."""
+
+[car]
+name = "2016 Kia Forte 2.0 (sim)"
+vin = "KNAFX4A67G5000555"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+rpm = { value = 700, jitter = 15 }
+speed = 0
+coolant = { value = 89, jitter = 0.5 }
+load = { value = 25, jitter = 1.5 }
+battery = { ramp_from = 12.3, ramp_to = 11.7, seconds = 900 }
+ambient = 9
+fuel = 50
+
+[dtcs]
+stored = ["P0562"]
+permanent = ["P0562"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"

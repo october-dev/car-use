@@ -1,0 +1,59 @@
+notes = """Random misfire, MIL on. RPM is unsteady at idle (wide jitter), load is
+erratic. Cylinder-specific codes (P0301-P0304) are pending but not confirmed,
+so the misfire moves between cylinders: suspect something shared (ignition
+coil pack, vacuum leak, fuel pressure, low compression on several cylinders)."""
+
+[car]
+name = "2012 Hyundai Elantra 1.8 (sim)"
+vin = "5NPDH4AEXCH000123"
+protocol = "6"
+
+[adapter]
+profile = "clone"
+
+[signals]
+rpm = { value = 690, jitter = 90 }
+speed = 0
+coolant = { value = 88, jitter = 0.5 }
+load = { value = 27, jitter = 6 }
+stft1 = { value = 4.0, jitter = 4 }
+ltft1 = 5.5
+map = { value = 36, jitter = 3 }
+timing = { value = 6, jitter = 3 }
+iat = 31
+maf = { value = 2.8, jitter = 0.3 }
+throttle = 15.0
+o2_b1s1 = { wave = "square", min = 0.1, max = 0.8, period = 0.9 }
+o2_b1s2 = { value = 0.6, jitter = 0.06 }
+runtime = 300
+distance_mil = 23
+fuel = 44
+warmups_since_clear = 30
+distance_since_clear = 1102
+baro = 101
+battery = { value = 13.9, jitter = 0.08 }
+ambient = 18
+
+[dtcs]
+stored = ["P0300"]
+pending = ["P0302", "P0304"]
+permanent = ["P0300"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "incomplete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[freeze_frame]
+dtc = "P0300"
+rpm = 1980
+speed = 54
+coolant = 88
+load = 52
+stft1 = 3.1
+ltft1 = 5.5
+iat = 29

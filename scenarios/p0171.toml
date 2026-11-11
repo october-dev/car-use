@@ -1,0 +1,59 @@
+notes = """P0171 system too lean, bank 1. Long-term trim is pegged high at idle and
+falls toward normal as airflow rises: the classic signature of an unmetered
+air (vacuum) leak, which matters most at low airflow. A weak fuel pump or
+clogged injectors would instead get worse under load."""
+
+[car]
+name = "2014 Ford Focus 2.0 (sim)"
+vin = "1FADP3F26EL400017"
+protocol = "6"
+
+[adapter]
+profile = "stn"
+
+[signals]
+rpm = { value = 810, jitter = 25 }
+speed = 0
+coolant = { value = 92, jitter = 0.5 }
+load = { value = 21, jitter = 2 }
+stft1 = { value = 9.4, jitter = 2 }
+ltft1 = 18.8
+map = { value = 34, jitter = 1.5 }
+timing = { value = 12, jitter = 1 }
+iat = 35
+maf = { value = 2.2, jitter = 0.15 }
+throttle = 15.3
+o2_b1s1 = { wave = "sine", min = 0.05, max = 0.55, period = 1.6 }
+o2_b1s2 = { value = 0.45, jitter = 0.05 }
+runtime = 1310
+distance_mil = 96
+fuel = 72
+warmups_since_clear = 60
+distance_since_clear = 2201
+baro = 100
+battery = { value = 14.3, jitter = 0.05 }
+ambient = 29
+
+[dtcs]
+stored = ["P0171"]
+pending = []
+permanent = ["P0171"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "incomplete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[freeze_frame]
+dtc = "P0171"
+rpm = 790
+speed = 0
+coolant = 91
+load = 20
+stft1 = 10.9
+ltft1 = 18.8
+iat = 33

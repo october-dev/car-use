@@ -1,0 +1,60 @@
+notes = """Check-engine light on: P0420 catalyst efficiency below threshold.
+The tell: the downstream O2 sensor (o2_b1s2) switches almost exactly like the
+upstream one (o2_b1s1). A healthy catalyst stores oxygen, so the downstream
+sensor should sit steady around 0.6-0.7 V. Fuel trims are normal, so this is
+not a lean/rich problem upstream."""
+
+[car]
+name = "2014 Toyota Corolla 1.8 (sim)"
+vin = "4T1BF1FK0EU300042"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+rpm = { value = 720, jitter = 15 }
+speed = 0
+coolant = { value = 91, jitter = 0.5 }
+load = { value = 24, jitter = 1.5 }
+stft1 = { wave = "sine", min = -2.5, max = 2.5, period = 2.0 }
+ltft1 = 2.3
+map = { value = 30, jitter = 1 }
+timing = { value = 10, jitter = 1 }
+iat = 30
+maf = { value = 2.5, jitter = 0.1 }
+throttle = 13.7
+o2_b1s1 = { wave = "sine", min = 0.1, max = 0.85, period = 1.2 }
+o2_b1s2 = { wave = "sine", min = 0.15, max = 0.8, period = 1.25 }
+runtime = { ramp_from = 600, ramp_to = 4200, seconds = 3600 }
+distance_mil = 412
+fuel = 38
+warmups_since_clear = 145
+distance_since_clear = 6210
+baro = 100
+battery = { value = 14.1, jitter = 0.05 }
+ambient = 21
+
+[dtcs]
+stored = ["P0420"]
+pending = []
+permanent = ["P0420"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[freeze_frame]
+dtc = "P0420"
+rpm = 2210
+speed = 72
+coolant = 89
+load = 41
+stft1 = 1.6
+ltft1 = 2.3
+iat = 28

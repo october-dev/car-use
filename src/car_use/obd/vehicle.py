@@ -1,0 +1,262 @@
+"""The OBD backend: a Vehicle reached through an ELM327/STN adapter."""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+
+from ..kernel.policy import Kernel, Decision
+from ..model.capability import Altitude, Capability, DriverOfRecord, Manifest, Tier
+from . import pids as P
+from .dtc_info import describe
+from .elm import Elm327, ElmError
+from . import vin as vinmod
+
+
+@dataclass
+class Reading:
+    name: str
+    path: str
+    value: float | None
+    unit: str
+    ts: float
+    source: str
+
+    def __repr__(self) -> str:
+        return f"{self.name}={self.value} {self.unit}"
+
+    def to_dict(self) -> dict:
+        return dict(self.__dict__)
+
+
+CAPABILITIES = [
+    Capability("obd.read", Altitude.OBSERVE, Tier.T0, "Read live Mode 01 signals"),
+    Capability("obd.dtcs", Altitude.OBSERVE, Tier.T0, "Stored, pending and permanent DTCs"),
+    Capability("obd.readiness", Altitude.OBSERVE, Tier.T0, "Emissions monitor readiness"),
+    Capability("obd.freeze_frame", Altitude.OBSERVE, Tier.T0, "Snapshot stored with the DTC"),
+    Capability("obd.vin", Altitude.OBSERVE, Tier.T0, "VIN from Mode 09"),
+    Capability("obd.raw_read", Altitude.OBSERVE, Tier.T0, "Read-only raw requests (01,02,03,06,07,09,0A,19,22)"),
+    Capability("obd.clear_dtcs", Altitude.ACT, Tier.T1D,
+               "Clear DTCs and MIL. Resets readiness monitors; permanent codes stay.",
+               preconditions=("engine_off_or_idle", "speed==0"), reversible=False,
+               driver_of_record=DriverOfRecord.NONE),
+]
+
+
+class ObdVehicle:
+    backend = "obd"
+
+    def __init__(self, elm: Elm327, device_url: str, kernel: Kernel | None = None,
+                 scenario=None):
+        self.elm = elm
+        self.device_url = device_url
+        self.kernel = kernel or Kernel()
+        self.scenario = scenario
+        self.vin = ""
+        self._supported: set[int] | None = None
+        self._multi_ok: bool | None = None
+
+    # -- connect ---------------------------------------------------------------
+    def connect(self) -> "ObdVehicle":
+        self.elm.initialize()
+        self.elm.detect_protocol()
+        try:
+            self.vin = self.read_vin()
+        except (ElmError, ValueError):
+            self.vin = ""
+        return self
+
+    def describe(self) -> dict:
+        info = self.elm.info
+        d = {"vin": self.vin or "unknown", "adapter": info.identity, "protocol": info.protocol,
+             "device": self.device_url}
+        if info.stn:
+            d["stn"] = info.stn
+        if self.scenario is not None:
+            d["simulated"] = self.scenario.title
+        return d
+
+    def manifest(self) -> Manifest:
+        sigs = [P.PIDS[p].signals[i].path for p in sorted(self.supported_pids()) if p in P.PIDS
+                for i in range(len(P.PIDS[p].signals))]
+        return Manifest(backend="obd", vehicle=self.describe(), signals=sigs,
+                        capabilities=list(CAPABILITIES))
+
+    # -- signals -----------------------------------------------------------------
+    def supported_pids(self) -> set[int]:
+        if self._supported is not None:
+            return self._supported
+        out: set[int] = set()
+        base = 0x00
+        while base <= 0xC0:
+            try:
+                p = self.elm.query_one(f"01{base:02X}")
+            except ElmError:
+                break
+            bits = int.from_bytes(p[2:6], "big")
+            for i in range(1, 33):
+                if bits & (1 << (32 - i)):
+                    out.add(base + i)
+            if not bits & 1:
+                break
+            base += 0x20
+        self._supported = out
+        return out
+
+    def signals(self, prefix: str = "") -> list[dict]:
+        out = []
+        for pid in sorted(self.supported_pids()):
+            spec = P.PIDS.get(pid)
+            if not spec:
+                continue
+            for s in spec.signals:
+                if s.path.startswith(prefix) or s.alias.startswith(prefix):
+                    out.append({"alias": s.alias, "path": s.path, "unit": s.unit,
+                                "pid": f"01{pid:02X}", "description": s.description})
+        return out
+
+    def read(self, name: str) -> Reading:
+        spec, idx, sig = P.resolve(name)
+        now = time.time()
+        try:
+            p = self.elm.query_one(f"01{spec.pid:02X}")
+        except ElmError as e:
+            if e.code == "NO DATA":
+                return Reading(sig.alias, sig.path, None, sig.unit, now, f"obd:01{spec.pid:02X} (no data)")
+            raise
+        data = p[2:2 + spec.length]
+        return Reading(sig.alias, sig.path, spec.decode(data)[idx], sig.unit, now, f"obd:01{spec.pid:02X}")
+
+    def read_many(self, names: list[str]) -> dict[str, Reading]:
+        resolved = [(n, *P.resolve(n)) for n in names]
+        pids_needed = list(dict.fromkeys(spec.pid for _, spec, _, _ in resolved))
+        values: dict[int, bytes] = {}
+        if self._multi_ok is not False and self.elm.info.is_can and len(pids_needed) > 1:
+            try:
+                for i in range(0, len(pids_needed), 6):
+                    chunk = pids_needed[i:i + 6]
+                    p = self.elm.query_one("01" + "".join(f"{x:02X}" for x in chunk))
+                    values.update(_split_multi(p[1:]))
+                self._multi_ok = all(x in values for x in pids_needed) or self._multi_ok
+            except ElmError:
+                self._multi_ok = False
+        now = time.time()
+        out: dict[str, Reading] = {}
+        for n, spec, idx, sig in resolved:
+            if spec.pid not in values:
+                out[n] = self.read(n)
+                continue
+            out[n] = Reading(sig.alias, sig.path, spec.decode(values[spec.pid])[idx], sig.unit,
+                             now, f"obd:01{spec.pid:02X}")
+        return out
+
+    # -- diagnostics ---------------------------------------------------------------
+    def _dtc_list(self, mode: str) -> list[str]:
+        try:
+            payloads = self.elm.query(mode)
+        except ElmError as e:
+            if e.code == "NO DATA":
+                return []
+            raise
+        codes: list[str] = []
+        want = int(mode, 16) + 0x40
+        for p in payloads:
+            if not p or p[0] != want:
+                continue
+            body = p[2:] if self.elm.info.is_can else p[1:]
+            for i in range(0, len(body) - 1, 2):
+                if body[i] == 0 and body[i + 1] == 0:
+                    continue
+                codes.append(P.decode_dtc(body[i], body[i + 1]))
+        return list(dict.fromkeys(codes))
+
+    def dtcs(self) -> dict:
+        res = {"stored": self._dtc_list("03"), "pending": self._dtc_list("07"),
+               "permanent": self._dtc_list("0A")}
+        res["descriptions"] = {c: describe(c) for c in
+                               dict.fromkeys(res["stored"] + res["pending"] + res["permanent"])}
+        try:
+            res["mil_on"] = self.readiness()["mil_on"]
+        except ElmError:
+            pass
+        return res
+
+    def readiness(self) -> dict:
+        p = self.elm.query_one("0101")
+        out = P.decode_monitor_status(p[2:6])
+        incomplete = [k for k, v in out["monitors"].items() if v != "complete"]
+        out["incomplete"] = incomplete
+        for alias in ("distance_since_clear", "warmups_since_clear"):
+            try:
+                out[alias] = self.read(alias).value
+            except (ElmError, KeyError):
+                pass
+        return out
+
+    def freeze_frame(self) -> dict:
+        try:
+            p = self.elm.query_one("020200")
+        except ElmError as e:
+            if e.code == "NO DATA":
+                return {}
+            raise
+        out: dict = {"dtc": P.decode_dtc(p[3], p[4]) if len(p) >= 5 else None, "values": {}}
+        for alias in ("rpm", "speed", "coolant", "load", "stft1", "ltft1", "iat", "map", "throttle"):
+            spec, idx, sig = P.resolve(alias)
+            try:
+                r = self.elm.query_one(f"02{spec.pid:02X}00")
+            except ElmError:
+                continue
+            out["values"][alias] = {"value": spec.decode(r[3:3 + spec.length])[idx], "unit": sig.unit}
+        return out
+
+    def read_vin(self) -> str:
+        p = self.elm.query_one("0902")
+        raw = p[3:] if len(p) > 3 and p[2] == 0x01 else p[2:]
+        return raw.decode("ascii", errors="replace").strip("\x00 ").strip()
+
+    def vin_info(self) -> dict:
+        return vinmod.decode(self.vin or self.read_vin())
+
+    def raw_obd(self, request: str) -> list[str] | Decision:
+        d = self.kernel.check_raw(request, self.vin)
+        if not d:
+            return d
+        return [p.hex(" ").upper() for p in self.elm.query(request)]
+
+    def clear_dtcs(self) -> Decision:
+        speed = rpm = None
+        try:
+            speed = self.read("speed").value
+            rpm = self.read("rpm").value
+        except ElmError:
+            pass
+        moving = speed not in (None, 0, 0.0)
+        state = (not moving and (rpm is None or rpm < 1200),
+                 "Car must be stationary with the engine off or idling to clear codes.")
+        before = self.dtcs()
+        d = self.kernel.authorize(
+            "obd.clear_dtcs", Tier.T1D, self.vin,
+            f"Clear all DTCs on {self.vin or 'this car'} (stored: {before['stored'] or 'none'})? "
+            "This turns off the check-engine light and resets emissions readiness monitors; "
+            "the car will fail an emissions inspection until they complete again.",
+            state_ok=state)
+        if not d:
+            return d
+        self.elm.query("04")
+        self.kernel.record("effect", vin=self.vin, intent="obd.clear_dtcs", before=before)
+        return d
+
+
+def _split_multi(body: bytes) -> dict[int, bytes]:
+    """Split a multi-PID Mode 01 reply body (after 0x41) into {pid: data}."""
+    out: dict[int, bytes] = {}
+    i = 0
+    while i < len(body):
+        pid = body[i]
+        length = 4 if pid in (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0, 0x01) else \
+            (P.PIDS[pid].length if pid in P.PIDS else None)
+        if length is None:
+            break
+        out[pid] = body[i + 1:i + 1 + length]
+        i += 1 + length
+    return out

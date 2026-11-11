@@ -1,0 +1,15 @@
+notes = """Adapter powered from the OBD port but the ignition is off, so no ECU
+answers. Everything should fail with a clear 'turn the ignition on' message,
+not a hang."""
+
+[car]
+name = "Parked car, ignition off (sim)"
+vin = "2HGFB2F53EH500001"
+protocol = "6"
+ignition = "off"
+
+[adapter]
+profile = "clone"
+
+[signals]
+battery = 12.4

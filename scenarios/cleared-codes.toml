@@ -1,0 +1,45 @@
+notes = """Used-car red flag: no codes and the MIL is off, but codes were cleared very
+recently. Distance since clear is 11 km after 2 warm-ups, and the catalyst,
+evap and O2 monitors are still incomplete. A seller who clears a check-engine
+light just before a viewing produces exactly this. Many US states will not
+pass an emissions inspection with incomplete monitors."""
+
+[car]
+name = "2015 Chevrolet Cruze 1.4T (sim)"
+vin = "1G1PE5SB7F7000999"
+protocol = "6"
+
+[adapter]
+profile = "clone"
+
+[signals]
+rpm = { value = 760, jitter = 20 }
+speed = 0
+coolant = { value = 86, jitter = 0.5 }
+load = { value = 23, jitter = 1.5 }
+stft1 = { wave = "sine", min = -3, max = 3, period = 2.0 }
+ltft1 = 3.1
+map = { value = 33, jitter = 1 }
+timing = { value = 8, jitter = 1 }
+iat = 27
+maf = { value = 2.9, jitter = 0.1 }
+throttle = 14.0
+o2_b1s1 = { wave = "sine", min = 0.1, max = 0.85, period = 1.2 }
+o2_b1s2 = { value = 0.66, jitter = 0.02 }
+runtime = 540
+distance_mil = 0
+fuel = 22
+warmups_since_clear = 2
+distance_since_clear = 11
+baro = 100
+battery = { value = 14.0, jitter = 0.05 }
+ambient = 20
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "incomplete"
+evap = "incomplete"
+o2_sensor = "incomplete"
+o2_heater = "complete"

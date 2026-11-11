@@ -1,0 +1,17 @@
+# Private working notes: plans, audits, research, rough work. Never commit.
+.plans/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Local car data (logs can contain VINs and locations)
+*.candump
+*.log
+.car-use/
+
+.DS_Store
