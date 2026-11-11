@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://github.com/october-dev/car-use">
+  <a href="https://car-use.dev">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
       <img src="assets/logo-light.svg" alt="car-use" width="560">
