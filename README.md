@@ -22,6 +22,10 @@
   <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/callout-dark.svg"><img src="assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/october-dev/car-use/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/october-dev/car-use/actions/workflows/ci.yml/badge.svg"></a>
+</p>
+
 ---
 
 Your AI agent can read your car's error codes, check its sensors and tell you what's wrong. All you need is a $15 plug-in adapter. No car nearby? Use a virtual one.
