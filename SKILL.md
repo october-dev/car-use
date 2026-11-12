@@ -102,5 +102,5 @@ This is a real car that belongs to a person.
 ## Limits (this version)
 
 - OBD-II Mode 01/02/03/07/09/0A and Mode 22 reads through `raw_obd`. No BLE yet. No CAN sniffing yet.
-- KWP2000 / ISO 9141 cars (older Maruti, many pre-2008 cars) should work through the adapter, but they are less tested than CAN.
+- KWP2000, ISO 9141-2 and J1850 cars (older Maruti, many pre-2008 cars) are read like CAN cars, but so far only against the simulator's `kwp2000` and `iso9141` virtual cars, not real ones. Connecting can take several seconds longer than on CAN.
 - Multi-ECU replies are merged. Manufacturer-specific codes need vehicle packs (coming).

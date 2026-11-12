@@ -34,6 +34,23 @@ _FRAME_IDX = re.compile(r"^[0-9A-F]:")
 _HEX = re.compile(r"^[0-9A-F]+$")
 
 
+def _reassemble_legacy(payloads: list[bytes]) -> list[bytes]:
+    """Join a non-CAN Mode 09 PID 02 reply into one CAN-shaped payload.
+
+    It arrives as several `49 02 nn` frames of four data bytes, with up to
+    three leading zero pads. Mode 03/07/0A needs no joining: each line is its
+    own payload and `ObdVehicle._dtc_list` reads them one by one.
+    """
+    if len(payloads) < 2:
+        return payloads
+    if all(len(p) >= 3 and p[0] == 0x49 and p[1] == 0x02 for p in payloads):
+        data = bytearray()
+        for p in payloads:
+            data += p[3:]
+        return [bytes([0x49, 0x02, 0x01]) + bytes(data).lstrip(b"\x00")]
+    return payloads
+
+
 class ElmError(RuntimeError):
     def __init__(self, command: str, code: str):
         self.command, self.code = command, code
@@ -70,7 +87,7 @@ class Elm327:
         with self.lock:
             start = time.monotonic()
             self.t.write(cmd.encode("ascii") + b"\r")
-            raw = self.t.read_until(b">", timeout or self.timeout)
+            raw = self.t.read_until(b">", self._timeout_for(timeout))
             text = raw.decode("ascii", errors="replace").replace("\n", "\r")
             lines = [ln.strip() for ln in text.split("\r")]
             lines = [ln for ln in lines if ln and ln != ">" and ln.rstrip(">") != ""]
@@ -115,15 +132,38 @@ class Elm327:
         self.info.stn = sti
         return self.info
 
+    def _timeout_for(self, timeout: float | None) -> float:
+        chosen = self.timeout if timeout is None else timeout
+        number = self.info.protocol_number.lstrip("A")
+        if number in {"1", "2", "3", "4", "5"}:
+            return max(chosen, 10.0)
+        return chosen
+
     def detect_protocol(self) -> str:
-        """Force protocol search with a harmless request, then ask which one it found."""
-        try:
-            self.query("0100")
-        except ElmError:
-            pass
+        """Find the protocol. Auto first, then ISO 14230, ISO 9141 and J1850.
+
+        Non-CAN cars are slow to wake. The first probe and each fallback use a
+        long timeout. A failed auto search tries protocols 5, 4, 3, 2 and 1
+        with ATTP, which does not rewrite the adapter's saved default the way
+        ATSP does. If none answers, the adapter goes back to automatic.
+        """
+        if not self._probe_0100(15.0):
+            for proto in ("5", "4", "3", "2", "1"):
+                self.at_ok(f"ATTP{proto}")
+                if self._probe_0100(15.0):
+                    break
+            else:
+                self.at_ok("ATSP0")
         self.info.protocol_number = self.at("ATDPN")
         self.info.protocol = self.at("ATDP")
         return self.info.protocol
+
+    def _probe_0100(self, timeout: float) -> bool:
+        try:
+            self.query("0100", timeout=timeout)
+            return True
+        except ElmError:
+            return False
 
     # -- OBD requests -----------------------------------------------------------
     def query(self, request: str, timeout: float | None = None) -> list[bytes]:
@@ -160,6 +200,8 @@ class Elm327:
                 payloads.append(bytes.fromhex(s))
         if multi is not None:
             payloads.append(bytes(multi[:multi_len] if multi_len else multi))
+        if not self.info.is_can:
+            payloads = _reassemble_legacy(payloads)
         if not payloads:
             raise ElmError(req, lines[-1] if lines else "NO DATA")
         return payloads

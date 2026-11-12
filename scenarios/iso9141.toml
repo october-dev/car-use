@@ -1,0 +1,28 @@
+notes = """1998 Ford on ISO 9141-2 (protocol 3). Same non-CAN reply shape as
+KWP: no ISO-TP length line, and Mode 03 has no count byte. One stored code,
+so the DTC reply is a single line."""
+
+[car]
+name = "1998 Ford Escort 2.0 (sim)"
+vin = "1FAHP3112WA109141"
+protocol = "3"
+
+[adapter]
+profile = "genuine"
+latency_ms = 30
+
+[signals]
+rpm = { value = 780, jitter = 15 }
+speed = 0
+coolant = { value = 90, jitter = 0.5 }
+battery = { value = 13.9, jitter = 0.05 }
+
+[dtcs]
+stored = ["P0301"]
+permanent = ["P0301"]
+
+[monitors]
+misfire = "incomplete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"

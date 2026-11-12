@@ -1,0 +1,31 @@
+notes = """2003 Maruti on KWP2000 fast init (protocol 5), not CAN. The adapter
+prints BUS INIT before the first reply, Mode 03 has no DTC count byte, and
+the VIN comes back as several 49 02 frames instead of one ISO-TP message.
+Four stored codes, so the DTC reply spans two lines."""
+
+[car]
+name = "2003 Maruti Esteem 1.3 (sim)"
+vin = "MA3EED1163A100914"
+protocol = "5"
+
+[adapter]
+profile = "genuine"
+latency_ms = 20
+
+[signals]
+rpm = { value = 850, jitter = 20 }
+speed = 0
+coolant = { value = 84, jitter = 0.5 }
+battery = { value = 14.0, jitter = 0.05 }
+
+[dtcs]
+stored = ["P0420", "P0171", "P0300", "P0128"]
+pending = []
+permanent = ["P0420"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "incomplete"
+o2_sensor = "incomplete"

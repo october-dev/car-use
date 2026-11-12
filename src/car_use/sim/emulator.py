@@ -100,6 +100,7 @@ class _Session:
     def reset(self):
         self.echo, self.linefeed, self.spaces, self.headers = True, True, True, False
         self.protocol = "0"
+        self.kwp_inited = False
 
     @property
     def identity(self) -> str:
@@ -109,7 +110,15 @@ class _Session:
     def _hex(self, data: bytes) -> str:
         return (" " if self.spaces else "").join(f"{b:02X}" for b in data)
 
+    def _protocol_number(self) -> str:
+        return self.protocol.lstrip("A")
+
+    def _non_can(self) -> bool:
+        return self._protocol_number() in {"1", "2", "3", "4", "5"}
+
     def frames(self, payload: bytes) -> list[str]:
+        if self._non_can():
+            return self._legacy_frames(payload)
         if len(payload) <= 7:
             body = self._hex(payload)
             if self.headers:
@@ -123,6 +132,29 @@ class _Session:
             lines.append(f"{idx % 16:X}:" + (" " if self.spaces else "") + self._hex(rest[:7]))
             rest, idx = rest[7:], idx + 1
         return lines
+
+    def _legacy_frames(self, payload: bytes) -> list[str]:
+        """ISO 9141-2, KWP2000 and J1850: no ISO-TP length line, no CAN header.
+
+        Mode 09 PID 02 is five frames of four data bytes, with three leading
+        zero pads so a 17-character VIN fits. Mode 03/07/0A has no DTC count
+        byte and repeats the service byte every six DTC bytes (the 7-byte
+        message limit).
+        """
+        if len(payload) >= 3 and payload[0] == 0x49 and payload[1] == 0x02:
+            data = payload[3:] if payload[2] == 0x01 else payload[2:]
+            if len(data) == 17:
+                data = b"\x00\x00\x00" + data
+            lines = []
+            for n, i in enumerate(range(0, len(data), 4), start=1):
+                lines.append(self._hex(bytes([0x49, 0x02, n]) + data[i:i + 4]))
+            return lines
+        if payload and payload[0] in (0x43, 0x47, 0x4A):
+            body = payload[1:] or b"\x00\x00"
+            return [self._hex(bytes([payload[0]]) + body[i:i + 6]) for i in range(0, len(body), 6)]
+        if len(payload) <= 7:
+            return [self._hex(payload)]
+        return [self._hex(payload[i:i + 7]) for i in range(0, len(payload), 7)]
 
     # -- dispatch ------------------------------------------------------------
     def handle(self, raw: str) -> list[str]:
@@ -146,6 +178,10 @@ class _Session:
         if self.protocol == "0":
             out.append("SEARCHING...")
             self.protocol = "A" + self.car.s.protocol
+        if self._protocol_number() in {"4", "5"} and not self.kwp_inited:
+            self.kwp_inited = True
+            time.sleep(0.15)
+            out.append("BUS INIT: ...OK")
         payload = self.obd(req)
         if payload is None:
             return out + ["NO DATA"]
@@ -215,6 +251,8 @@ class _Session:
         if mode in (0x03, 0x07, 0x0A):
             codes = {0x03: car.stored, 0x07: car.pending, 0x0A: car.permanent}[mode]
             body = b"".join(P.encode_dtc(c) for c in codes)
+            if self._non_can():
+                return bytes([mode + 0x40]) + body
             return bytes([mode + 0x40, len(codes)]) + body
         if mode == 0x04:
             car.clear()
