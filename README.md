@@ -51,7 +51,7 @@ Works with Claude Code, Codex, OpenClaw, Hermes and any AI agent that can run a 
 Paste this into your agent:
 
 ```text
-Install car-use with `uv tool install git+https://github.com/october-dev/car-use`, run `car-use skill` and follow it, then read https://github.com/october-dev/car-use/blob/main/onboarding.md and walk me through it.
+Install car-use with `uv tool install car-use`, run `car-use skill` and follow it, then read https://github.com/october-dev/car-use/blob/main/onboarding.md and walk me through it.
 ```
 
 Your agent installs car-use, learns how to use it, shows you a practice diagnosis on a virtual car, then helps you plug in your adapter. You do the plugging in and turning the key. The agent does the rest.
@@ -74,7 +74,7 @@ car-use dongle-doctor   # what adapter did you actually buy? graded A to D
 Pretend cars with real problems to solve. Pick one and let your agent work out what's wrong:
 
 ```bash
-uv tool install git+https://github.com/october-dev/car-use
+uv tool install car-use
 car-use --sim p0420 <<'PY'
 print(dtcs())
 print(watch(["o2_b1s1", "o2_b1s2"], seconds=10))
