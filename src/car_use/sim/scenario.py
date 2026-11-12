@@ -8,6 +8,8 @@
     [monitors]  catalyst = "complete" | "incomplete", ...
     [freeze_frame]  dtc = "P0420", plus alias = value pairs
     [dids]      "F190" = "hex bytes"  (Mode 22 data identifiers)
+    [extra_ecus.7E9]  a second ECU. stored/pending/permanent, signals, dids.
+                Silent unless headers are on, or ATSH selects it.
 """
 from __future__ import annotations
 
@@ -34,6 +36,7 @@ class Scenario:
     monitors: dict = field(default_factory=dict)
     freeze_frame: dict = field(default_factory=dict)
     dids: dict = field(default_factory=dict)
+    extra_ecus: dict = field(default_factory=dict)
     notes: str = ""
     source: str = ""
 
@@ -93,4 +96,20 @@ def load(name_or_path: str) -> Scenario:
         adapter=data.get("adapter", {}), signals=data.get("signals", {}),
         dtcs=data.get("dtcs", {}), monitors=data.get("monitors", {}),
         freeze_frame=data.get("freeze_frame", {}), dids=data.get("dids", {}),
+        extra_ecus=_extra_ecus(data.get("extra_ecus") or {}),
         notes=data.get("notes", ""), source=str(p))
+
+
+def _extra_ecus(raw: dict) -> dict:
+    out = {}
+    for ecu, body in raw.items():
+        if not isinstance(body, dict):
+            continue
+        out[str(ecu).upper()] = {
+            "stored": list(body.get("stored") or []),
+            "pending": list(body.get("pending") or []),
+            "permanent": list(body.get("permanent") or []),
+            "signals": dict(body.get("signals") or {}),
+            "dids": {str(k).upper(): v for k, v in dict(body.get("dids") or {}).items()},
+        }
+    return out

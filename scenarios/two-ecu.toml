@@ -1,0 +1,41 @@
+notes = """Two ECUs on the same bus. The engine (7E8) has P0300 and coolant at
+90 C. The transmission (7E9) has P0700 and its own coolant reading of 40 C,
+which is not the engine. Headers off, a normal read is the engine. With
+headers, dtcs()["by_ecu"] keeps each code with the CAN id that sent it.
+DID F190 is AA AA on the engine and BB BB on the transmission, and it is
+only a simulator identifier."""
+
+[car]
+name = "2014 car with a separate transmission ECU (sim)"
+vin = "4T1BF1FK0EU300042"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+latency_ms = 15
+
+[signals]
+rpm = 800
+speed = 0
+coolant = 90
+battery = 14.1
+
+[dtcs]
+stored = ["P0300"]
+
+[monitors]
+misfire = "incomplete"
+fuel_system = "complete"
+components = "complete"
+
+[dids]
+F190 = "AAAA"
+
+[extra_ecus.7E9]
+stored = ["P0700"]
+
+[extra_ecus.7E9.signals]
+coolant = 40
+
+[extra_ecus.7E9.dids]
+F190 = "BBBB"

@@ -34,6 +34,46 @@ _FRAME_IDX = re.compile(r"^[0-9A-F]:")
 _HEX = re.compile(r"^[0-9A-F]+$")
 
 
+_11BIT_ECUS = {f"7E{d}" for d in "89ABCDEF"}
+
+
+def assemble_headers(lines: list[str]) -> dict[str, bytes]:
+    """ATH1 lines to one payload per sender. 11-bit ids are 3 hex digits, 29-bit are 8."""
+    pending: dict[str, dict] = {}
+    done: dict[str, bytes] = {}
+    for ln in lines:
+        s = ln.replace(" ", "").upper()
+        if not s or not _HEX.match(s):
+            continue
+        ident, rest = _split_can_id(s)
+        if ident is None or len(rest) < 2:
+            continue
+        pci = int(rest[:2], 16)
+        data = bytes.fromhex(rest[2:]) if rest[2:] else b""
+        kind = pci >> 4
+        if kind == 0:
+            done[ident] = data[:pci & 0x0F]
+            pending.pop(ident, None)
+        elif kind == 1 and data:
+            total = ((pci & 0x0F) << 8) | data[0]
+            pending[ident] = {"need": total, "buf": bytearray(data[1:]), "next": 1}
+        elif kind == 2 and ident in pending and (pci & 0x0F) == pending[ident]["next"]:
+            pending[ident]["buf"] += data
+            pending[ident]["next"] = (pending[ident]["next"] + 1) & 0xF
+            if len(pending[ident]["buf"]) >= pending[ident]["need"]:
+                done[ident] = bytes(pending[ident]["buf"][:pending[ident]["need"]])
+                pending.pop(ident, None)
+    return done
+
+
+def _split_can_id(line: str) -> tuple[str | None, str]:
+    if len(line) >= 5 and line[:3] in _11BIT_ECUS:
+        return line[:3], line[3:]
+    if len(line) >= 10 and line[:2] in {"18", "19"}:
+        return line[:8], line[8:]
+    return None, line
+
+
 class ElmError(RuntimeError):
     def __init__(self, command: str, code: str):
         self.command, self.code = command, code
@@ -163,6 +203,27 @@ class Elm327:
         if not payloads:
             raise ElmError(req, lines[-1] if lines else "NO DATA")
         return payloads
+
+    def query_by_ecu(self, request: str) -> dict[str, bytes]:
+        """ATH1 for this request, then one payload per CAN id. Restores ATH0."""
+        self.at_ok("ATH1")
+        try:
+            lines = self.command(request)
+        finally:
+            self.at_ok("ATH0")
+        return assemble_headers(lines)
+
+    def target_ecu(self, response_id: str) -> None:
+        """ATSH so the next request goes to the ECU that answers as `response_id`."""
+        resp = response_id.replace(" ", "").upper()
+        if len(resp) <= 3:
+            req = f"{int(resp, 16) - 8:03X}"
+        else:
+            req = resp
+        self.at_ok("ATSH" + req)
+
+    def restore_target(self) -> None:
+        self.at_ok("ATSH7DF")
 
     def query_one(self, request: str) -> bytes:
         """First payload whose service byte is the positive response (+0x40)."""

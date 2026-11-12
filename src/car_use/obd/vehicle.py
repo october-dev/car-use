@@ -9,6 +9,7 @@ from ..model.capability import Altitude, Capability, DriverOfRecord, Manifest, T
 from . import pids as P
 from .dtc_info import describe
 from .elm import Elm327, ElmError
+from ..transport.base import TransportError
 from . import vin as vinmod
 
 
@@ -26,6 +27,19 @@ class Reading:
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
+
+
+def _codes_from(payload: bytes | None) -> list[str]:
+    """CAN DTC payload: service, count, then pairs. Empty and 0000 pairs are skipped."""
+    if not payload or payload[0] not in (0x43, 0x47, 0x4A):
+        return []
+    body = payload[2:]
+    out = []
+    for i in range(0, len(body) - 1, 2):
+        if body[i] == 0 and body[i + 1] == 0:
+            continue
+        out.append(P.decode_dtc(body[i], body[i + 1]))
+    return out
 
 
 CAPABILITIES = [
@@ -114,17 +128,23 @@ class ObdVehicle:
                                 "pid": f"01{pid:02X}", "description": s.description})
         return out
 
-    def read(self, name: str) -> Reading:
+    def read(self, name: str, ecu: str | None = None) -> Reading:
         spec, idx, sig = P.resolve(name)
         now = time.time()
+        if ecu:
+            self.elm.target_ecu(ecu)
         try:
             p = self.elm.query_one(f"01{spec.pid:02X}")
         except ElmError as e:
             if e.code == "NO DATA":
                 return Reading(sig.alias, sig.path, None, sig.unit, now, f"obd:01{spec.pid:02X} (no data)")
             raise
+        finally:
+            if ecu:
+                self.elm.restore_target()
         data = p[2:2 + spec.length]
-        return Reading(sig.alias, sig.path, spec.decode(data)[idx], sig.unit, now, f"obd:01{spec.pid:02X}")
+        return Reading(sig.alias, sig.path, spec.decode(data)[idx], sig.unit, now,
+                       f"obd:01{spec.pid:02X}" + (f"@{ecu}" if ecu else ""))
 
     def read_many(self, names: list[str]) -> dict[str, Reading]:
         resolved = [(n, *P.resolve(n)) for n in names]
@@ -150,6 +170,32 @@ class ObdVehicle:
         return out
 
     # -- diagnostics ---------------------------------------------------------------
+    def _dtcs_with_headers(self) -> dict | None:
+        """Ask with ATH1 so each ECU's codes stay attached to its CAN id."""
+        try:
+            found = {mode: self.elm.query_by_ecu(mode) for mode in ("03", "07", "0A")}
+        except (ElmError, TransportError):
+            return None
+        per: dict[str, dict] = {}
+        for mode, key in (("03", "stored"), ("07", "pending"), ("0A", "permanent")):
+            for ecu, payload in found[mode].items():
+                per.setdefault(ecu, {"stored": [], "pending": [], "permanent": []})
+                per[ecu][key] = _codes_from(payload)
+        per = {ecu: codes for ecu, codes in per.items() if any(codes.values())}
+
+        def union(key: str) -> list[str]:
+            out: list[str] = []
+            for codes in per.values():
+                for code in codes[key]:
+                    if code not in out:
+                        out.append(code)
+            return out
+
+        if not per:
+            return None
+        return {"stored": union("stored"), "pending": union("pending"),
+                "permanent": union("permanent"), "by_ecu": per}
+
     def _dtc_list(self, mode: str) -> list[str]:
         try:
             payloads = self.elm.query(mode)
@@ -170,8 +216,10 @@ class ObdVehicle:
         return list(dict.fromkeys(codes))
 
     def dtcs(self) -> dict:
-        res = {"stored": self._dtc_list("03"), "pending": self._dtc_list("07"),
-               "permanent": self._dtc_list("0A")}
+        res = self._dtcs_with_headers()
+        if res is None:
+            res = {"stored": self._dtc_list("03"), "pending": self._dtc_list("07"),
+                   "permanent": self._dtc_list("0A"), "by_ecu": {}}
         res["descriptions"] = {c: describe(c) for c in
                                dict.fromkeys(res["stored"] + res["pending"] + res["permanent"])}
         try:
@@ -217,11 +265,17 @@ class ObdVehicle:
     def vin_info(self) -> dict:
         return vinmod.decode(self.vin or self.read_vin())
 
-    def raw_obd(self, request: str) -> list[str] | Decision:
+    def raw_obd(self, request: str, ecu: str | None = None) -> list[str] | Decision:
         d = self.kernel.check_raw(request, self.vin)
         if not d:
             return d
-        return [p.hex(" ").upper() for p in self.elm.query(request)]
+        if ecu:
+            self.elm.target_ecu(ecu)
+        try:
+            return [p.hex(" ").upper() for p in self.elm.query(request)]
+        finally:
+            if ecu:
+                self.elm.restore_target()
 
     def clear_dtcs(self) -> Decision:
         speed = rpm = None

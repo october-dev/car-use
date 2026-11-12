@@ -90,6 +90,7 @@ PY
 | `dying-battery` | Battery not charging. Voltage keeps dropping while the engine runs. | Easy |
 | `healthy` | Nothing wrong. Use it to see what normal looks like. | Easy |
 | `ignition-off` | The adapter has power but the car doesn't answer. | Easy |
+| `two-ecu` | Engine and transmission both answer. Codes stay with the ECU that sent them. | Medium |
 
 Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
 
@@ -112,7 +113,7 @@ PY
 | `car()` | The connected car. `.describe()` gives a summary |
 | `manifest()` | Everything this car can report and do |
 | `signals()` | The live readings this car supports, with names and units |
-| `read(name)` / `read_many(names)` | One or more readings, e.g. `"rpm"`, `"Vehicle.Speed"` |
+| `read(name)` / `read_many(names)` | One or more readings, e.g. `"rpm"`, `"Vehicle.Speed"`. `read(name, ecu="7E9")` asks one ECU |
 | `watch(names, seconds)` | Readings over time, with min, max, average and how often they swing |
 | `dtcs()` | Error codes in plain English, and whether the check engine light is on |
 | `freeze_frame()` | What the car was doing when the code appeared |
