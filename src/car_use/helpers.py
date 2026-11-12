@@ -14,8 +14,8 @@ from .obd import pids as _pids
 _state: dict = {"vehicle": None, "device": None}
 
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
-           "freeze_frame", "vin_info", "raw_obd", "clear_dtcs", "dongle_doctor", "scenarios",
-           "describe_dtc", "Series"]
+           "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
+           "dongle_doctor", "scenarios", "describe_dtc", "Series"]
 
 
 def _configure(device: str | None) -> None:

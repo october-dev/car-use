@@ -1,4 +1,8 @@
 """OBD inspection check against the federal monitor allowance and the virtual cars."""
+import subprocess
+import sys
+
+from car_use.obd.elm import ElmError
 from car_use.obd.inspection import DRIVE, judge, ready_for_inspection
 
 
@@ -24,16 +28,23 @@ def test_allowance_by_model_year():
     assert not two_bad["ready"] and "allowed 1" in two_bad["reasons"][-1]
 
 
-def test_light_codes_and_continuous_monitors_fail():
-    lit = judge(mil_on=True, stored=["P0420"], model_year=2014, monitors=_monitors())
+def test_light_and_codes_fail():
+    lit = judge(mil_on=True, stored=[], model_year=2014, monitors=_monitors())
     assert not lit["ready"]
     assert "check-engine" in lit["next"]
     assert DRIVE not in lit["next"]
     continuous = judge(mil_on=False, stored=[], model_year=2016,
                        monitors=_monitors(misfire="incomplete"))
-    assert not continuous["ready"] and continuous["next"] == DRIVE
-    old = judge(mil_on=False, stored=[], model_year=1990, monitors=_monitors())
+    assert continuous["ready"] and continuous["next"] is None
+    counted = judge(mil_on=False, stored=[], model_year=2016,
+                    monitors=_monitors(misfire="incomplete", evap="incomplete"))
+    assert not counted["ready"] and counted["next"] == DRIVE
+    faulty = judge(mil_on=False, stored=["P0171"], model_year=2014,
+                   monitors=_monitors(evap="incomplete"))
+    assert not faulty["ready"] and DRIVE not in faulty["next"]
+    old = judge(mil_on=False, stored=[], model_year=1990, monitors=_monitors(evap="incomplete"))
     assert not old["ready"] and old["incomplete_allowed"] is None
+    assert old["next"] == "This check does not apply to that model year."
 
 
 def test_unknown_year_uses_the_stricter_allowance():
@@ -59,3 +70,27 @@ def test_cleared_codes_need_a_drive_cycle(sim):
     assert {"catalyst", "evap", "o2_sensor"} <= set(report["incomplete"])
     assert report["next"] == DRIVE
     assert report["mil_on"] is False
+
+
+def test_missing_or_unverified_vin_uses_the_stricter_allowance(sim, monkeypatch):
+    car = sim("healthy")
+    car._emulator.car.monitors.update(catalyst="incomplete", evap="incomplete")
+
+    def no_vin():
+        raise ElmError("0902", "NO DATA")
+
+    monkeypatch.setattr(car, "read_vin", no_vin)
+    # Second VIN decodes to 1998, but its check digit is 3 instead of 4.
+    for vin in ("", "2HGFB2253WH500001"):
+        car.vin = vin
+        report = ready_for_inspection(car)
+        assert report["model_year"] is None and report["year_note"]
+        assert report["incomplete_allowed"] == 1 and not report["ready"]
+
+
+def test_helper_is_loaded_into_scripts():
+    r = subprocess.run([sys.executable, "-m", "car_use.run", "--sim", "cleared-codes"],
+                       input="print(ready_for_inspection()['result'])\n",
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "not ready" in r.stdout

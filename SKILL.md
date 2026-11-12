@@ -73,7 +73,7 @@ Common aliases:
 ## Used-car checks
 
 - Codes cleared recently look like this: `readiness()["incomplete"]` lists catalyst/evap/O2, and `distance_since_clear` is small (under a few hundred km) with few warm-ups.
-- A clean `dtcs()` on a car with incomplete monitors is a red flag, not a pass. `ready_for_inspection()` says so. Say so plainly.
+- A clean `dtcs()` on a car with incomplete monitors is a red flag, not a pass. Say so plainly.
 - Compare `vin_info()` against the VIN on the windshield and the paperwork.
 
 ## Consent and safety
