@@ -24,6 +24,7 @@ Commands:
   car-use config set device URL    tcp://192.168.0.10:35000 | serial:///dev/cu.X?baud=38400 | sim:p0420
   car-use policy show|enable TIER|disable TIER    per-vehicle tiers (enable needs a person)
   car-use audit [--verify]         show or verify the audit log
+  car-use mcp [--sim S]           local MCP server on stdin/stdout
   car-use --version
 """
 
@@ -172,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:
         sp = sub.add_parser(name)
         sp.add_argument("--sim")
         sp.add_argument("--device")
+    sp = sub.add_parser("mcp")
+    sp.add_argument("--sim")
+    sp.add_argument("--device")
     sub.add_parser("scenarios")
     sp = sub.add_parser("sim")
     sp.add_argument("scenario", nargs="?", default="healthy")
@@ -205,6 +209,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_doctor(args)
     if args.cmd == "dongle-doctor":
         return cmd_dongle_doctor(args)
+    if args.cmd == "mcp":
+        from .mcp_server import serve
+        return serve(_device(args))
     if args.cmd == "scenarios":
         from .sim.scenario import available, load
         for n in sorted(available()):

@@ -95,7 +95,7 @@ Each virtual car can also pretend to be a different adapter: a genuine ELM327, a
 
 ## How agents use it
 
-Your agent sends short Python scripts. The helpers are already loaded:
+Your agent sends short Python scripts. The helpers are already loaded. An agent with no shell can use the [MCP server](setup/mcp.md) instead.
 
 ```bash
 car-use <<'PY'
