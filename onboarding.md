@@ -2,7 +2,7 @@
 
 Walk the person through this, one step at a time. Wait for them where a step needs their hands.
 
-1. **Check the install.** Run `car-use --version` and `car-use skill`. Read the skill fully before continuing.
+1. **Check the install.** If `car-use` is missing, run `uv tool install car-use`. Then run `car-use --version` and `car-use skill`. Read the skill fully before continuing.
 2. **Show the simulator first.** Run one scenario end to end (`car-use --sim p0420`). Read codes, the freeze frame and readiness, watch both O2 sensors, and explain the finding in plain words. This shows the person what car-use does before any hardware is involved.
 3. **Ask what they have:**
    - An OBD-II adapter? Which kind: Wi-Fi, USB, or Bluetooth (BLE isn't supported yet).

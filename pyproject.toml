@@ -1,6 +1,6 @@
 [project]
 name = "car-use"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Let your agent use your car."
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ classifiers = [
 Homepage = "https://car-use.dev"
 Repository = "https://github.com/october-dev/car-use"
 Issues = "https://github.com/october-dev/car-use/issues"
+Changelog = "https://github.com/october-dev/car-use/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 serial = ["pyserial>=3.5"]
@@ -36,6 +37,9 @@ dev = ["pytest>=8"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/car_use/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/car_use"]

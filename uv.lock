@@ -29,7 +29,6 @@ wheels = [
 
 [[package]]
 name = "car-use"
-version = "0.0.1"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -50,7 +49,7 @@ requires-dist = [
     { name = "bleak", marker = "extra == 'ble'", specifier = ">=0.22" },
     { name = "pyserial", marker = "extra == 'serial'", specifier = ">=3.5" },
 ]
-provides-extras = ["serial", "ble"]
+provides-extras = ["ble", "serial"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
