@@ -1,0 +1,14 @@
+name: example-counter
+description: Synthetic pack for tests. F190 here is not a Toyota identifier.
+match:
+  wmi: ["4T1"]
+  year_from: 2014
+  year_to: 2014
+dids:
+  - ecu: "7E0"
+    id: "F190"
+    name: pack_counter
+    formula: "A * 256 + B"
+    unit: count
+    vss: Vehicle.Demo.Counter
+    description: Two-byte synthetic counter.

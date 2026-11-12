@@ -54,6 +54,7 @@ class ObdVehicle:
         self.vin = ""
         self._supported: set[int] | None = None
         self._multi_ok: bool | None = None
+        self._pack_cache: list | None = None
 
     # -- connect ---------------------------------------------------------------
     def connect(self) -> "ObdVehicle":
@@ -112,9 +113,49 @@ class ObdVehicle:
                 if s.path.startswith(prefix) or s.alias.startswith(prefix):
                     out.append({"alias": s.alias, "path": s.path, "unit": s.unit,
                                 "pid": f"01{pid:02X}", "description": s.description})
+        for did in self._pack_dids():
+            if did.name.startswith(prefix) or did.vss.startswith(prefix) or prefix in ("", "pack"):
+                out.append({"alias": did.name, "path": did.vss, "unit": did.unit,
+                            "pid": f"22{did.did}", "description": did.description,
+                            "ecu": did.ecu, "pack": True})
         return out
 
+    def _matched_packs(self) -> list:
+        if self._pack_cache is None:
+            from .packs import matching
+            self._pack_cache = matching(self.vin)
+        return self._pack_cache
+
+    def _pack_dids(self) -> list:
+        return [did for pack in self._matched_packs() for did in pack.dids]
+
+    def _pack_did(self, name: str):
+        from .packs import find_did
+        return find_did(name, self._matched_packs())
+
+    def _read_pack(self, name: str) -> Reading | None:
+        did = self._pack_did(name)
+        if did is None:
+            return None
+        from .packs import FormulaError, decode_payload
+        now = time.time()
+        source = f"obd:22{did.did}@{did.ecu}"
+        if did.ecu:
+            self.elm.at_ok("ATSH" + did.ecu)
+        try:
+            payload = self.elm.query_one("22" + did.did)
+            value = decode_payload(did.formula, payload)
+        except (ElmError, FormulaError, ValueError) as e:
+            return Reading(did.name, did.vss, None, did.unit, now, f"{source} ({e})")
+        finally:
+            if did.ecu:
+                self.elm.at_ok("ATSH7DF")
+        return Reading(did.name, did.vss, value, did.unit, now, source)
+
     def read(self, name: str) -> Reading:
+        packed = self._read_pack(name)
+        if packed is not None:
+            return packed
         spec, idx, sig = P.resolve(name)
         now = time.time()
         try:

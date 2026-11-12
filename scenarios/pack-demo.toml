@@ -1,0 +1,27 @@
+notes = """Virtual car for the vehicle-pack loader. DID F190 is 01 2C on purpose
+so a test pack can decode A*256+B = 300. It is not a Toyota data identifier.
+Without a matching pack in ~/.car-use/packs, this is just a healthy idle."""
+
+[car]
+name = "Pack demo, synthetic Mode 22 (sim)"
+vin = "4T1BF1FK0EU300042"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+latency_ms = 10
+
+[signals]
+rpm = 750
+speed = 0
+coolant = 90
+battery = 14.2
+
+[dids]
+F190 = "01 2C"
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
