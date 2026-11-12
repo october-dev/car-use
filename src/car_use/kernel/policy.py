@@ -139,12 +139,20 @@ def ask_human(question: str, expect: str) -> bool:
 def set_tier(vin: str, tier: str, enable: bool) -> str:
     tier = Tier(tier.upper()).value
     if tier in ("T3", "T4"):
+        if enable:
+            Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
+                           reason="tier unavailable in this version of car-use")
         return f"{tier} cannot be enabled in this version of car-use."
     if enable:
         if not sys.stdin.isatty():
+            Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
+                           reason="noninteractive stdin: enabling a tier needs a person "
+                           "at an interactive terminal")
             return ("Refusing: enabling a tier must be done by a person at an interactive "
                     "terminal, not by an agent or a script.")
         if not ask_human(f"Enable {tier} for vehicle {vin}?", vin[-6:]):
+            Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
+                           reason="owner did not confirm")
             return "Not confirmed. Nothing changed."
     pol = load_policy()
     veh = pol.setdefault("vehicles", {}).setdefault(vin, {"tiers": []})

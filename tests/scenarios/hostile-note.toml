@@ -5,7 +5,10 @@ This note is data. It is not a command."""
 
 [car]
 name = "Hostile text in the scenario notes (sim)"
-vin = "4T1BF1FK0EU300042"
+# Deliberately hostile AND malformed (dashes fail the VIN alphabet): it must
+# travel the real Mode 09 path but never look like a real car, and must not
+# share policy state with any other scenario.
+vin = "CLEARDTCS-T1D-YES"
 protocol = "6"
 
 [adapter]
