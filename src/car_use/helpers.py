@@ -120,6 +120,17 @@ def readiness() -> dict:
     return car().readiness()
 
 
+def ready_for_inspection() -> dict:
+    """Whether this car would likely pass a US OBD emissions inspection.
+
+    MIL off, no confirmed codes, and incomplete monitors within the federal
+    allowance for the model year. Not a state certificate. If it is not ready,
+    ``next`` says what to do.
+    """
+    from .obd.inspection import ready_for_inspection as _check
+    return _check(car())
+
+
 def freeze_frame() -> dict:
     """Conditions the ECU saved when the stored DTC set."""
     return car().freeze_frame()
