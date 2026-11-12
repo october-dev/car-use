@@ -1,0 +1,47 @@
+notes = """CNG bi-fuel car running on gas, with nothing else wrong. Standard
+Mode 01 trims, oxygen sensors and load look like a healthy petrol car, so the
+fuel type is not something those sensors will tell you. DID F1E1 is
+simulator-only (not a real manufacturer address): 01 would be petrol, 02 is CNG."""
+
+[car]
+name = "2019 Maruti Suzuki WagonR CNG (sim)"
+vin = "MA3ERLF10KH100002"
+protocol = "6"
+
+[adapter]
+profile = "clone"
+
+[signals]
+rpm = { value = 800, jitter = 15 }
+speed = 0
+coolant = { value = 86, jitter = 0.5 }
+load = { value = 23, jitter = 1 }
+stft1 = { value = 1.2, jitter = 1 }
+ltft1 = 1.4
+map = { value = 33, jitter = 1 }
+timing = 8
+iat = 30
+maf = { value = 2.1, jitter = 0.1 }
+throttle = 15
+o2_b1s1 = { wave = "sine", min = 0.12, max = 0.82, period = 1.4 }
+o2_b1s2 = { value = 0.64, jitter = 0.02 }
+runtime = 300
+fuel = 70
+baro = 98
+battery = { value = 14.0, jitter = 0.05 }
+ambient = 31
+
+[dtcs]
+stored = []
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[dids]
+F1E1 = "02"

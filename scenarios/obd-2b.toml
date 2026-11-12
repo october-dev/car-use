@@ -1,0 +1,28 @@
+notes = """OBD-2B scooter. The port answers rpm, speed, coolant, throttle and
+the 12 V supply, and the continuous monitors. It does not answer oxygen
+sensors, fuel trims, MAF or the catalyst/evap monitors. Missing sensors here
+are the protocol, not a fault. Nothing is wrong with this one."""
+
+[car]
+name = "2020 Honda Activa (sim)"
+vin = "ME4JC5AA1LA200002"
+protocol = "6"
+
+[adapter]
+profile = "clone"
+
+[signals]
+rpm = { value = 1400, jitter = 30 }
+speed = 0
+coolant = { value = 78, jitter = 0.5 }
+throttle = 5
+runtime = 180
+battery = { value = 13.9, jitter = 0.05 }
+
+[dtcs]
+stored = []
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"

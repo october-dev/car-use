@@ -1,6 +1,8 @@
 """Scenario files: a virtual car as TOML.
 
-    [car]       name, vin, protocol (6 = ISO 15765 CAN 11-bit 500k), ignition
+    [car]       name, vin, protocol (6 = ISO 15765 CAN 11-bit 500k),
+                ignition = "run"|"off"|"accessory",
+                ignition_type = "spark"|"compression"
     [adapter]   profile = "genuine" | "clone" | "stn", latency_ms
     [signals]   alias = number | {value, jitter} | {wave="sine"|"square", min, max, period}
                        | {ramp_from, ramp_to, seconds}
@@ -28,6 +30,7 @@ class Scenario:
     vin: str
     protocol: str = "6"
     ignition: str = "run"
+    compression: bool = False
     adapter: dict = field(default_factory=dict)
     signals: dict = field(default_factory=dict)
     dtcs: dict = field(default_factory=dict)
@@ -94,6 +97,7 @@ def from_dict(data: dict, name: str, source: str = "") -> Scenario:
     return Scenario(
         name=name, title=car.get("name", name), vin=car.get("vin", "1CARUSE0000000000"),
         protocol=str(car.get("protocol", "6")), ignition=car.get("ignition", "run"),
+        compression=car.get("ignition_type", "spark") == "compression",
         adapter=data.get("adapter", {}), signals=data.get("signals", {}),
         dtcs=data.get("dtcs", {}), monitors=data.get("monitors", {}),
         freeze_frame=data.get("freeze_frame", {}), dids=data.get("dids", {}),

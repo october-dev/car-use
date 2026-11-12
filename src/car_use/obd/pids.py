@@ -146,9 +146,12 @@ def decode_monitor_status(d: bytes) -> dict:
     return out
 
 
-def encode_monitor_status(mil_on: bool, dtc_count: int, monitors: dict) -> bytes:
+def encode_monitor_status(mil_on: bool, dtc_count: int, monitors: dict,
+                          compression: bool = False) -> bytes:
     a = (0x80 if mil_on else 0) | min(dtc_count, 0x7F)
     b = c = dd = 0
+    if compression:
+        b |= 0x08  # PID 01 byte B bit 3: compression ignition (diesel)
     for i, name in enumerate(CONTINUOUS):
         if name in monitors:
             b |= 1 << i
