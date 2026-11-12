@@ -90,6 +90,8 @@ PY
 | `dying-battery` | Battery not charging. Voltage keeps dropping while the engine runs. | Easy |
 | `healthy` | Nothing wrong. Use it to see what normal looks like. | Easy |
 | `ignition-off` | The adapter has power but the car doesn't answer. | Easy |
+| `kwp2000` | Older car on KWP2000, not CAN. Several codes, slow to wake. | Medium |
+| `iso9141` | Older car on ISO 9141-2. One code. | Medium |
 
 Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
 
