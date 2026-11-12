@@ -28,6 +28,7 @@ Commands:
   car-use maker [MAKE|VIN]         what car-use knows about a car maker
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log
+  car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
   car-use --version
 """
 
@@ -150,6 +151,34 @@ def cmd_policy(args) -> int:
     return 0
 
 
+def cmd_inspect(args) -> int:
+    from .connect import open_vehicle, NoDevice
+    from .inspection_report import build, render_html, render_markdown
+    from .transport.base import TransportError
+    from .obd.elm import ElmError
+    try:
+        v = open_vehicle(_device(args))
+    except NoDevice as e:
+        print(f"no device: {e}")
+        return 1
+    except (TransportError, ElmError, OSError) as e:
+        print(f"cannot connect: {e}")
+        return 1
+    try:
+        report = build(v, expect_vin=args.expect_vin)
+    finally:
+        v.elm.close()
+        if getattr(v, "_emulator", None):
+            v._emulator.stop()
+    text = render_markdown(report)
+    if args.html:
+        Path(args.html).write_text(render_html(report), encoding="utf-8")
+    if args.md:
+        Path(args.md).write_text(text, encoding="utf-8")
+    print(text, end="")
+    return 0
+
+
 def cmd_audit(args) -> int:
     from .kernel.policy import Audit
     a = Audit()
@@ -269,6 +298,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--vin")
     sp.add_argument("--sim")
     sp.add_argument("--device")
+    sp = sub.add_parser("inspect")
+    sp.add_argument("--sim")
+    sp.add_argument("--device")
+    sp.add_argument("--expect-vin")
+    sp.add_argument("--html")
+    sp.add_argument("--md")
     sp = sub.add_parser("audit")
     sp.add_argument("--verify", action="store_true")
     sp.add_argument("-n", type=int, default=20)
@@ -322,6 +357,8 @@ def main(argv: list[str] | None = None) -> int:
             print("Name a tier, e.g. car-use policy enable T1D")
             return 1
         return cmd_policy(args)
+    if args.cmd == "inspect":
+        return cmd_inspect(args)
     if args.cmd == "audit":
         return cmd_audit(args)
     if args.cmd == "bench":
