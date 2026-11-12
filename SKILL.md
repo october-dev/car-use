@@ -69,7 +69,7 @@ Common aliases:
 3. **Confirm with live data before naming a cause.** Choose the signals that would distinguish the candidate causes, then `watch()` them. Examples:
    - **Catalyst (P0420):** compare `o2_b1s1` and `o2_b1s2`. A downstream sensor switching like the upstream one means the catalyst isn't storing oxygen.
    - **Lean (P0171):** compare `ltft1` at idle against 2500 rpm. High at idle and normal at speed points to a vacuum leak. Getting worse under load points to fuel delivery.
-   - **Charging:** `battery` with the engine running should read 13.8-14.6 V.
+   - **Charging:** `battery` with the engine running is usually 13.8-14.6 V, but some cars regulate 12.6-15.5 V. One reading is not a diagnosis; recommend a charging-system test.
 4. **Report observations with numbers, then your reasoning, then the confidence.** Give the next physical check a person can do (a smoke test, a multimeter reading, a visual check). The harness reports, you decide. Don't invent precision the data doesn't have.
 5. **Batch once a sequence works.** One script that reads codes, freeze frame, readiness and a 10 s watch beats five round trips.
 6. **Missing data is information.** `value=None` / "no data" means this car doesn't report that PID. Many EVs report very little over standard OBD.
@@ -77,7 +77,7 @@ Common aliases:
 
 ## Used-car checks
 
-- Codes cleared recently look like this: `readiness()["incomplete"]` lists catalyst/evap/O2, and `distance_since_clear` is small (under a few hundred km) with few warm-ups.
+- Codes cleared recently look like this: `readiness()["incomplete"]` lists catalyst/evap/O2, and `distance_since_clear` is under 300 km or `warmups_since_clear` is under 10. (`car-use inspect` uses the same rule.)
 - A clean `dtcs()` on a car with incomplete monitors is a red flag, not a pass. Say so plainly. `car-use inspect` writes the red / amber / green scan. Pass `--expect-vin` with the VIN from the windshield.
 - Compare `vin_info()` against the VIN on the windshield and the paperwork.
 

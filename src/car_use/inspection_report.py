@@ -6,90 +6,110 @@ odometer data is said out loud. Nothing here is a mechanical inspection.
 from __future__ import annotations
 
 import html
+from datetime import datetime, timezone
+
+from .obd.elm import ElmError
+from .obd.vin import decode as vin_decode
+from .transport.base import TransportError
+
+# A recent clear looks like incomplete monitors plus little driving since.
+# Monitors usually complete within a few hundred km / several warm-ups of
+# normal driving, so below either bound the car likely has not had the
+# chance — consistent with a recent clear, not proof of one. Missing values
+# simply do not count towards "recent". Kept in sync with "Used-car checks"
+# in SKILL.md.
+RECENT_CLEAR_KM = 300
+RECENT_CLEAR_WARMUPS = 10
+
+_MONITOR_NAMES = {
+    "misfire": "misfire", "fuel_system": "fuel system", "components": "components",
+    "catalyst": "catalyst", "evap": "EVAP", "o2_sensor": "oxygen sensor",
+    "o2_heater": "oxygen sensor heater", "egr": "EGR", "pm_filter": "particulate filter",
+}
 
 
 def build(vehicle, expect_vin: str | None = None) -> dict:
     codes = vehicle.dtcs()
     ready = vehicle.readiness()
-    info = vehicle.vin_info()
     items: list[dict] = []
 
     stored = list(codes.get("stored") or [])
     pending = list(codes.get("pending") or [])
     permanent = list(codes.get("permanent") or [])
-    if codes.get("mil_on") or stored:
-        items.append(_item("red", "Check-engine light or confirmed codes",
-                           "Stored: " + (", ".join(stored) or "none") +
-                           f". Light commanded on: {bool(codes.get('mil_on'))}."))
+    descriptions = codes.get("descriptions") or {}
+    # The light is sampled twice (once inside dtcs(), once here); an observed
+    # "on" from either sample is kept.
+    mil_on = bool(codes.get("mil_on") or ready.get("mil_on"))
+    if mil_on or stored:
+        detail = "Stored: " + (_describe_codes(stored, descriptions) or "none") + ". "
+        detail += ("The check-engine light is commanded on." if mil_on
+                   else "The check-engine light is not commanded on.")
+        items.append(_item("red", "Check-engine light or confirmed codes", detail))
     else:
         items.append(_item("green", "No confirmed codes",
                            "The check-engine light is not commanded on, and there are no stored codes."))
     if pending:
         items.append(_item("amber", "Pending codes",
-                           "Seen once, not confirmed: " + ", ".join(pending) + "."))
+                           "Seen once, not confirmed: "
+                           + _describe_codes(pending, descriptions) + "."))
     if permanent and not stored:
-        items.append(_item("amber", "Permanent codes are still stored",
-                           ", ".join(permanent) + ". A scan tool cannot clear these. "
-                           "They usually mean a fault was confirmed and the monitor has not run since."))
-    elif permanent:
-        items.append(_item("red", "Permanent codes", ", ".join(permanent) + "."))
+        items.append(_item(
+            "amber", "Permanent codes are still stored",
+            _describe_codes(permanent, descriptions) + ". A scan tool cannot clear "
+            "these: a confirmed fault is still held in permanent memory and its "
+            "repair has not been verified. Ask the seller for the repair history "
+            "and re-check after a drive."))
+    # Stored codes together with permanent ones are already red above.
 
     incomplete = list(ready.get("incomplete") or [])
     distance = ready.get("distance_since_clear")
     warmups = ready.get("warmups_since_clear")
-    recent = (distance is not None and distance < 80) or (warmups is not None and warmups < 5)
+    recent = ((distance is not None and distance < RECENT_CLEAR_KM)
+              or (warmups is not None and warmups < RECENT_CLEAR_WARMUPS))
+    names = ", ".join(_MONITOR_NAMES.get(m, m.replace("_", " ")) for m in incomplete)
     if incomplete and recent:
         items.append(_item(
             "red", "Monitors look recently cleared",
-            f"Incomplete: {', '.join(incomplete)}. "
-            f"Distance since codes were cleared: {distance} km. "
-            f"Warm-ups since clear: {warmups}. "
+            f"Incomplete: {names}. "
+            f"Distance since codes were cleared: {_km(distance)}. "
+            f"Warm-ups since clear: {_num(warmups)}. "
             "A seller can turn the light off and still leave this pattern."))
     elif incomplete:
         items.append(_item("amber", "Some monitors are not complete",
-                           ", ".join(incomplete) + ". Not enough on its own to call the codes cleared, "
+                           names + ". Not enough on its own to call the codes cleared, "
                            "but an inspection may still refuse the car."))
     else:
         items.append(_item("green", "Readiness monitors are complete",
-                           f"Distance since codes were cleared: {distance} km. "
-                           f"Warm-ups since clear: {warmups}."))
+                           f"Distance since codes were cleared: {_km(distance)}. "
+                           f"Warm-ups since clear: {_num(warmups)}."))
 
-    car_vin = (info.get("vin") or vehicle.vin or "").strip().upper()
-    typed = (expect_vin or "").strip().upper()
-    if not typed:
-        items.append(_item("amber", "VIN was not compared",
-                           f"The car reports {car_vin or 'no VIN'}. "
-                           "Type the VIN from the windshield with --expect-vin and run this again."))
-    elif typed != car_vin:
-        items.append(_item("red", "VIN does not match",
-                           f"You typed {typed}. The car reports {car_vin or 'nothing'}."))
-    else:
-        items.append(_item("green", "VIN matches what you typed", car_vin))
-
+    items.append(_vin_item(vehicle, expect_vin))
     items.append(_charging(vehicle))
     items.append(_item(
-        "amber", "Odometer was not compared across ECUs",
-        "Standard OBD on this connection does not report a per-ECU odometer, "
-        "so a cluster-versus-module mismatch could not be checked."))
+        "amber", "Odometer was not compared across modules",
+        "car-use does not yet compare odometer readings across modules."))
 
     rank = {"red": 2, "amber": 1, "green": 0}
     worst = max(items, key=lambda item: rank[item["level"]])["level"]
     headlines = {
         "red": "Do not treat this car as clean on this scan.",
-        "amber": "No red flag in this scan, but something could not be checked.",
-        "green": "Nothing in this scan is a red flag.",
+        "amber": "No red flag in this scan, but something needs attention.",
     }
+    scenario = getattr(vehicle, "scenario", None)
     return {
         "verdict": worst,
-        "headline": headlines[worst],
-        "vin": car_vin,
+        "headline": headlines.get(worst, headlines["amber"]),
+        "vin": (vehicle.vin or "").strip().upper(),
+        "scanned_at": datetime.now(timezone.utc).isoformat(timespec="minutes"),
+        "simulated": scenario.title if scenario is not None else None,
         "items": items,
         "note": "This is an OBD scan, not a mechanical inspection and not an emissions certificate.",
     }
 
 
 def render_markdown(report: dict) -> str:
-    lines = [f"# Used-car scan: {report['headline']}", "", report["note"], ""]
+    lines = [f"# Used-car scan: {report['headline']}", "", _provenance(report), "",
+             report["note"], ""]
     for level in ("red", "amber", "green"):
         group = [item for item in report["items"] if item["level"] == level]
         if not group:
@@ -106,42 +126,125 @@ def render_html(report: dict) -> str:
     colors = {"red": "#9b1c1c", "amber": "#8a5a00", "green": "#1b6b3a"}
     parts = [
         "<!DOCTYPE html>",
+        "<html lang=\"en\">",
+        "<head>",
         "<meta charset=\"utf-8\">",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
         f"<title>{html.escape(report['headline'])}</title>",
+        "</head>",
         "<body style=\"font-family: Georgia, serif; max-width: 40rem; margin: 2rem auto; color: #222\">",
         f"<h1>{html.escape(report['headline'])}</h1>",
+        f"<p>{html.escape(_provenance(report))}</p>",
         f"<p>{html.escape(report['note'])}</p>",
     ]
-    for item in report["items"]:
-        color = colors[item["level"]]
-        parts.append(
-            f"<h2 style=\"color: {color}\">{html.escape(item['level'])}: {html.escape(item['title'])}</h2>"
-            f"<p>{html.escape(item['detail'])}</p>"
-        )
+    for level in ("red", "amber", "green"):
+        for item in [i for i in report["items"] if i["level"] == level]:
+            color = colors[item["level"]]
+            parts.append(
+                f"<h2 style=\"color: {color}\">{html.escape(item['level'])}: "
+                f"{html.escape(item['title'])}</h2>"
+                f"<p>{html.escape(item['detail'])}</p>"
+            )
     parts.append("</body>")
+    parts.append("</html>")
     return "\n".join(parts) + "\n"
+
+
+def _vin_item(vehicle, expect_vin: str | None) -> dict:
+    # The VIN already cached at connect time; never re-read here, so an
+    # unreadable VIN cannot abort the rest of the report.
+    car_vin = (vehicle.vin or "").strip().upper()
+    typed = (expect_vin or "").strip().upper()
+    if not vin_decode(car_vin).get("valid_format"):
+        return _item("amber", "VIN could not be read",
+                     "The car did not report a usable VIN, so it was not compared. "
+                     "Compare the VIN on the windshield with the paperwork yourself.")
+    if not typed:
+        return _item("amber", "VIN was not compared",
+                     f"The car reports {car_vin}. "
+                     "Type the VIN from the windshield with --expect-vin and run this again.")
+    if not vin_decode(typed).get("valid_format"):
+        return _item("amber", "The VIN you typed is not usable",
+                     f"{typed} is not a valid 17-character VIN, so it was not compared. "
+                     "Check it against the windshield and run this again.")
+    if typed != car_vin:
+        return _item("red", "VIN does not match",
+                     f"You typed {typed}. The car reports {car_vin}.")
+    detail = car_vin
+    info = vin_decode(car_vin)
+    maker, year = info.get("manufacturer") or "", info.get("model_year")
+    if year and not maker.startswith("unknown"):
+        detail += f" ({maker}, {year})"
+    elif year:
+        detail += f" ({year})"
+    return _item("green", "VIN matches what you typed", detail)
 
 
 def _charging(vehicle) -> dict:
     try:
         volts = vehicle.read("battery").value
         rpm = vehicle.read("rpm").value
-    except Exception as e:
+    except (TransportError, ElmError, OSError) as e:
         return _item("amber", "Charging voltage was not read", str(e))
     if volts is None:
         return _item("amber", "Battery voltage was not reported",
                      "This car did not answer the 12 V PID, so charging was not checked.")
-    running = rpm is not None and rpm > 400
-    if running and volts < 13.2:
-        return _item("red", "Battery is not being charged",
-                     f"{volts} V with the engine running. A healthy alternator holds about 13.8 to 14.6 V.")
-    if running and volts > 15.2:
-        return _item("red", "Charging voltage is high",
-                     f"{volts} V. That is above a normal alternator.")
-    if running:
-        return _item("green", "Charging voltage looks normal", f"{volts} V at {rpm} rpm.")
+    if rpm is None:
+        return _item("amber", "Engine state is unknown, so charging was not checked",
+                     f"Battery reads {_volts(volts)} but the engine speed was not reported. "
+                     "Start the engine and scan again to see the alternator.")
+    if rpm > 400:
+        at = f"with the engine running at {_rpm(rpm)}"
+        if volts < 13.2:
+            return _item("amber", "Charging voltage reads low",
+                         f"{_volts(volts)} {at}. Some cars regulate charging down to "
+                         "about 12.6 V in fuel-economy mode, so one reading cannot "
+                         "diagnose the alternator. Have the charging system tested "
+                         "if it stays low.")
+        if volts > 15.2:
+            return _item("amber", "Charging voltage reads high",
+                         f"{_volts(volts)} {at}. Some regulated systems charge up to "
+                         "about 15.5 V, so one reading cannot diagnose the alternator. "
+                         "Have the charging system tested if it stays high.")
+        return _item("green", "Charging voltage looks normal",
+                     f"{_volts(volts)} at {_rpm(rpm)}.")
     return _item("amber", "Engine was not running, so charging was not checked",
-                 f"Battery reads {volts} V. Start the engine and scan again to see the alternator.")
+                 f"Battery reads {_volts(volts)}. Start the engine and scan again to see the alternator.")
+
+
+def _describe_codes(codes: list[str], descriptions: dict) -> str:
+    parts = []
+    for code in codes:
+        desc = (descriptions or {}).get(code)
+        parts.append(f"{code} ({desc})" if desc else code)
+    return ", ".join(parts)
+
+
+def _provenance(report: dict) -> str:
+    when = report.get("scanned_at") or "an unknown time"
+    sim = report.get("simulated")
+    src = f"simulated car: {sim}" if sim else "live car"
+    return f"Scanned {when} ({src})."
+
+
+def _km(distance) -> str:
+    if distance is None:
+        return "not reported"
+    return f"{distance:g} km" if isinstance(distance, float) else f"{distance} km"
+
+
+def _num(value) -> str:
+    if value is None:
+        return "not reported"
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def _volts(volts: float) -> str:
+    return f"{volts:.1f} V"
+
+
+def _rpm(rpm: float) -> str:
+    return f"{rpm:.0f} rpm"
 
 
 def _item(level: str, title: str, detail: str) -> dict:

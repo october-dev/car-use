@@ -166,16 +166,25 @@ def cmd_inspect(args) -> int:
         return 1
     try:
         report = build(v, expect_vin=args.expect_vin)
+    except (TransportError, ElmError, OSError) as e:
+        print(f"cannot scan: {e}")
+        return 1
     finally:
         v.elm.close()
         if getattr(v, "_emulator", None):
             v._emulator.stop()
     text = render_markdown(report)
-    if args.html:
-        Path(args.html).write_text(render_html(report), encoding="utf-8")
-    if args.md:
-        Path(args.md).write_text(text, encoding="utf-8")
     print(text, end="")
+    try:
+        if args.html:
+            Path(args.html).write_text(render_html(report), encoding="utf-8")
+            print(f"wrote {args.html}", file=sys.stderr)
+        if args.md:
+            Path(args.md).write_text(text, encoding="utf-8")
+            print(f"wrote {args.md}", file=sys.stderr)
+    except OSError as e:
+        print(f"could not save: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -281,8 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("skill")
     for name in ("doctor", "dongle-doctor"):
         sp = sub.add_parser(name)
-        sp.add_argument("--sim")
-        sp.add_argument("--device")
+        sp.add_argument("--sim", default=argparse.SUPPRESS)
+        sp.add_argument("--device", default=argparse.SUPPRESS)
     sub.add_parser("scenarios")
     sp = sub.add_parser("sim")
     sp.add_argument("scenario", nargs="?", default="healthy")
@@ -296,11 +305,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("action", choices=["show", "enable", "disable"])
     sp.add_argument("tier", nargs="?", default="")
     sp.add_argument("--vin")
-    sp.add_argument("--sim")
-    sp.add_argument("--device")
+    sp.add_argument("--sim", default=argparse.SUPPRESS)
+    sp.add_argument("--device", default=argparse.SUPPRESS)
     sp = sub.add_parser("inspect")
-    sp.add_argument("--sim")
-    sp.add_argument("--device")
+    sp.add_argument("--sim", default=argparse.SUPPRESS)
+    sp.add_argument("--device", default=argparse.SUPPRESS)
     sp.add_argument("--expect-vin")
     sp.add_argument("--html")
     sp.add_argument("--md")

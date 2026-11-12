@@ -75,6 +75,16 @@ car-use dongle-doctor   # what adapter did you actually buy? graded A to D
 
 Longer notes for Wi-Fi, USB, Windows and Bluetooth, plus which adapters are worth buying: [setup/](setup/).
 
+### Buying a used car?
+
+```bash
+car-use inspect --expect-vin <the-VIN-from-the-windshield>   # red / amber / green scan
+car-use inspect --sim cleared-codes --html scan.html         # try it on a virtual car
+car-use inspect --md scan.md                                 # save the markdown too
+```
+
+This is an OBD scan, not a mechanical inspection: codes, self-checks, identity and charging voltage. It does not compare odometer readings across modules yet.
+
 ## No car? Use a virtual one.
 
 Pretend cars with real problems to solve. Pick one and let your agent work out what's wrong:
