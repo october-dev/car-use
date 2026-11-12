@@ -1,25 +1,25 @@
 <div align="center">
   <a href="https://car-use.dev">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-      <img src="assets/logo-light.svg" alt="car-use" width="560">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/logo-dark.svg">
+      <img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/logo-light.svg" alt="car-use" width="560">
     </picture>
   </a>
   <br>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/tagline-dark.svg">
-    <img src="assets/tagline-light.svg" alt="Let your agent use your car." width="520">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/tagline-dark.svg">
+    <img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/tagline-light.svg" alt="Let your agent use your car." width="520">
   </picture>
 </div>
 
 ---
 
 <p>
-  <a href="https://car-use.dev"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-site-dark.svg"><img src="assets/button-site-light.svg" height="40" align="top" alt="Website"></picture></a>
-  <a href="#setup"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-setup-dark.svg"><img src="assets/button-setup-light.svg" height="40" align="top" alt="Setup"></picture></a>
-  <a href="SKILL.md"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-skill-dark.svg"><img src="assets/button-skill-light.svg" height="40" align="top" alt="Skill"></picture></a>
-  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/button-sim-dark.svg"><img src="assets/button-sim-light.svg" height="40" align="top" alt="Virtual car"></picture></a>
-  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/callout-dark.svg"><img src="assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
+  <a href="https://car-use.dev"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-site-dark.svg"><img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-site-light.svg" height="40" align="top" alt="Website"></picture></a>
+  <a href="#setup"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-setup-dark.svg"><img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-setup-light.svg" height="40" align="top" alt="Setup"></picture></a>
+  <a href="https://github.com/october-dev/car-use/blob/main/SKILL.md"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-skill-dark.svg"><img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-skill-light.svg" height="40" align="top" alt="Skill"></picture></a>
+  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-sim-dark.svg"><img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/button-sim-light.svg" height="40" align="top" alt="Virtual car"></picture></a>
+  <a href="#no-car-use-a-virtual-one"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/october-dev/car-use/main/assets/callout-dark.svg"><img src="https://raw.githubusercontent.com/october-dev/car-use/main/assets/callout-light.svg" height="40" align="top" alt="No car nearby? Diagnose a virtual one, no hardware needed."></picture></a>
 </p>
 
 ---
