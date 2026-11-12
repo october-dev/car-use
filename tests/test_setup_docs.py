@@ -1,4 +1,5 @@
 """Setup pages stay aligned with the sentences doctor actually prints."""
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,23 @@ def test_wifi_and_usb_pages_use_the_documented_addresses():
     assert "192.168.1.10" in wifi
     assert "WiFi_OBDII" in wifi
     assert "/dev/cu." in usb and "ttyUSB" in usb and "COM" in usb
-    assert "car-use[serial]" in usb
+    assert "car-use[serial] @ git+https://github.com/october-dev/car-use" in usb
     assert "38400" in usb
     assert "BLE adapters are not supported yet" in ble
+
+
+def test_usb_page_urls_reach_the_port_they_name(monkeypatch):
+    from car_use.transport import base
+    opened = []
+    monkeypatch.setattr(base, "SerialTransport",
+                        lambda path, baud=38400: opened.append((path, baud)))
+    usb = (SETUP / "usb.md").read_text(encoding="utf-8")
+    for baud in (38400, 115200):
+        opened.clear()
+        for url in re.findall(r'config set device "(serial:[^"]+)"', usb):
+            base.open_transport(url.replace("baud=38400", f"baud={baud}"))
+        assert opened == [(port, baud) for port in
+                          ("/dev/cu.usbserial-A12345", "/dev/ttyUSB0", "COM3")]
+    opened.clear()
+    base.open_transport("COM3")
+    assert opened == [("COM3", 38400)]

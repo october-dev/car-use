@@ -80,8 +80,8 @@ class SerialTransport(Transport):
         try:
             import serial  # type: ignore
         except ImportError as e:
-            raise TransportError("Serial adapters need pyserial: "
-                                 "uv tool install 'car-use[serial]'") from e
+            raise TransportError("Serial adapters need pyserial: uv tool install "
+                                 '"car-use[serial] @ git+https://github.com/october-dev/car-use"') from e
         self.url = f"serial://{path}?baud={baud}"
         try:
             self.ser = serial.Serial(path, baudrate=baud, timeout=0.1)

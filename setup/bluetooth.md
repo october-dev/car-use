@@ -1,12 +1,8 @@
 # Bluetooth
 
-Bluetooth LE adapters (OBDLink CX, Vgate iCar Pro, and most phone-only clones) are not supported yet.
+Bluetooth LE adapters (OBDLink CX, the BLE 4.0 Vgate iCar Pro, and most phone-only clones) are not supported yet.
 
-```text
-car-use config set device ble://anything
-```
-
-doctor then says: `BLE adapters are not supported yet. Use a USB or Wi-Fi adapter, or the simulator: --sim p0420`.
+If the device is set to a `ble://` URL, doctor says: `BLE adapters are not supported yet. Use a USB or Wi-Fi adapter, or the simulator: --sim p0420`.
 
 Use a Wi-Fi or USB adapter instead. See [wifi.md](wifi.md) and [usb.md](usb.md). There is nothing to pair and no Bluetooth driver to install until that support exists.
 

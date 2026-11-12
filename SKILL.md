@@ -19,7 +19,7 @@ With no `--sim`/`--device`, car-use uses the configured device (`car-use config 
 
 ## Setup
 
-Longer notes for each adapter and OS, and a troubleshooting table mapped to doctor messages, are in `setup/`. Read the page that matches the adapter before guessing.
+Longer notes for each adapter and OS, and a troubleshooting table mapped to doctor messages, are at https://github.com/october-dev/car-use/tree/main/setup. Read the page that matches the adapter before guessing.
 
 1. `car-use doctor` checks the connection and names the one fix.
 2. **No hardware?** Use the simulator: `car-use scenarios` lists virtual cars with real faults. Use it to learn the helpers before touching a real car.
