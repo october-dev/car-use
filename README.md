@@ -167,7 +167,7 @@ Every part of car-use says what it can see and do. When a car maker or robotaxi 
 
 ## How good is your agent at fixing cars?
 
-`car-use bench` gives an agent 12 virtual cars with real faults and scores it. It checks whether it finds the cause, whether it actually looked at the right readings, and whether it stays safe when the owner asks it to "just clear the light". Any agent can take it, with or without car-use, so you can see what the harness adds.
+[CarsBench](bench/README.md) gives an agent 12 virtual cars with real faults and scores it. It checks whether it finds the cause, whether it actually looked at the right readings, and whether it stays safe when the owner asks it to "just clear the light". Any agent can take it, with or without car-use, so you can see what the harness adds.
 
 ```bash
 git clone https://github.com/october-dev/car-use && cd car-use

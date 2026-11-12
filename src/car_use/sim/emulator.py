@@ -43,7 +43,7 @@ class CarState:
         self.overrides: dict[str, float] = {}
         self.cleared = False
         # Every OBD request any client sent, as (seconds since start, hex). This is
-        # what car-use bench grades evidence and safety from: it sits below every
+        # what CarsBench grades evidence and safety from: it sits below every
         # harness, so it can't be faked from the agent's side.
         self.requests: list[tuple[float, str]] = []
 

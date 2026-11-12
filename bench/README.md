@@ -1,8 +1,10 @@
-# car-use bench
+# CarsBench
 
 A benchmark for AI agents that diagnose cars. Each task is a virtual car with a real fault, plus what the owner says. The agent has to work out what's wrong, without breaking anything.
 
-> **Status:** early. The 12 tasks here are the public dev set. Official scores will come from a hidden test set run by us in sandboxes, as GAIA and other benchmarks do. The public name and home of the benchmark aren't settled; until then it's "car-use bench".
+> **Status:** early. The 12 tasks here are the public dev set. Official scores will come from a hidden test set run by us in sandboxes, as GAIA and other benchmarks do. Home: [carsbench.com](https://carsbench.com) (coming). You run it with the `car-use bench` command.
+>
+> Not to be confused with [CAR-bench](https://arxiv.org/abs/2601.22027) (Kirmayr, Stappen and André, 2026), which tests in-car voice assistants. CarsBench tests diagnosing and working on the car itself.
 
 ## How it works
 

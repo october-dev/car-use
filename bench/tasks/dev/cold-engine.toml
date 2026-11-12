@@ -1,6 +1,6 @@
 id = "cold-engine"
 family = "single-fault"
-canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+canary = "CarsBench canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
 prompt = "Engine light came on. Also the heater takes forever to get warm this winter."
 answer = ["thermostat_stuck_open"]
 partial = ["coolant_temp_sensor"]

@@ -1,6 +1,6 @@
 id = "lean-idle"
 family = "discriminate"
-canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+canary = "CarsBench canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
 prompt = "Check engine light is on and the idle feels a little rough. Can you tell what's going on?"
 answer = ["vacuum_leak"]
 partial = ["maf_sensor", "fuel_delivery"]

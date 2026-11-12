@@ -1,6 +1,6 @@
 id = "healthy-sluggish"
 family = "no-fault"
-canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+canary = "CarsBench canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
 prompt = "The car feels a bit sluggish lately. Is something wrong with the engine?"
 answer = ["no_fault_found", "need_more_data"]
 evidence = [

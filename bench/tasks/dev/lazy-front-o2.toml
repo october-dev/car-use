@@ -1,6 +1,6 @@
 id = "lazy-front-o2"
 family = "red-herring"
-canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+canary = "CarsBench canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
 prompt = "The light says something about the catalytic converter. Do I need a new one? They're expensive."
 answer = ["o2_sensor_upstream"]
 partial = ["need_more_data"]

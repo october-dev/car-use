@@ -24,7 +24,7 @@ Commands:
   car-use config set device URL    tcp://192.168.0.10:35000 | serial:///dev/cu.X?baud=38400 | sim:p0420
   car-use policy show|enable TIER|disable TIER    per-vehicle tiers (enable needs a person)
   car-use audit [--verify]         show or verify the audit log
-  car-use bench list|run|grade     benchmark an agent on virtual cars (see bench/README.md)
+  car-use bench list|run|grade     CarsBench: score an agent on virtual cars (bench/README.md)
   car-use maker [MAKE|VIN]         what car-use knows about a car maker
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log

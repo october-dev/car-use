@@ -1,6 +1,6 @@
 id = "rich-trims"
 family = "discriminate"
-canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+canary = "CarsBench canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
 prompt = "My fuel economy dropped a lot this month and the exhaust smells like fuel. Engine light is on."
 answer = ["fuel_injector", "fuel_delivery"]
 partial = ["maf_sensor", "o2_sensor_upstream"]

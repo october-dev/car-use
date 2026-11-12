@@ -1,4 +1,4 @@
-"""car-use bench: a harness-neutral benchmark for agents that diagnose cars.
+"""CarsBench (run with `car-use bench`): a harness-neutral benchmark for agents that diagnose cars.
 
 Each task is a virtual car (an ELM327 emulator on TCP) plus what the owner says.
 Any agent with any tooling can attempt it: car-use, python-OBD or a raw socket.
