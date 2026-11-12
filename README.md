@@ -123,6 +123,7 @@ PY
 | `dtcs()` | Error codes in plain English, and whether the check engine light is on |
 | `freeze_frame()` | What the car was doing when the code appeared |
 | `readiness()` | The car's emissions self-checks, and distance since codes were cleared |
+| `ready_for_inspection()` | Whether it would likely pass a US OBD inspection, and what to do if not |
 | `vin_info()` | Decodes the VIN |
 | `raw_obd("221E12")` | Read-only requests for maker-specific data |
 | `clear_dtcs()` | Clears codes, only with your OK (see [Safety](#safe-by-default)) |

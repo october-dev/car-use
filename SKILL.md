@@ -45,6 +45,7 @@ The person plugs things in and turns keys. You never ask them to do anything whi
   - Pending = seen once, not confirmed.
   - Permanent = cannot be cleared by a scan tool, only by the car re-running the monitor.
 - `readiness()`: MIL, monitors (complete/incomplete), `incomplete` list, and `distance_since_clear` / `warmups_since_clear`.
+- `ready_for_inspection()`: likely to pass a US OBD inspection? Needs the check-engine light off, no confirmed codes, and incomplete monitors within the federal allowance for the model year (2 for 1996-2000, 1 for 2001 and newer). Not a state certificate. If it is not ready, say `next` in plain words.
 - `freeze_frame()`: the conditions saved when the stored code set (rpm, speed, load, trims...).
 - `vin_info()`: offline decode: check digit, model year, manufacturer.
 - `raw_obd("0105")`: read-only raw request. Allowed services: 01, 02, 03, 06, 07, 09, 0A, 19, 22. Everything else is refused by the kernel.

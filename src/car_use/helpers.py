@@ -14,8 +14,8 @@ from .obd import pids as _pids
 _state: dict = {"vehicle": None, "device": None}
 
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
-           "freeze_frame", "vin_info", "raw_obd", "clear_dtcs", "dongle_doctor", "scenarios",
-           "describe_dtc", "Series"]
+           "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
+           "dongle_doctor", "scenarios", "describe_dtc", "Series"]
 
 
 def _configure(device: str | None) -> None:
@@ -118,6 +118,17 @@ def dtcs() -> dict:
 def readiness() -> dict:
     """MIL, DTC count, emissions monitors, distance and warm-ups since codes were cleared."""
     return car().readiness()
+
+
+def ready_for_inspection() -> dict:
+    """Whether this car would likely pass a US OBD emissions inspection.
+
+    MIL off, no confirmed codes, and incomplete monitors within the federal
+    allowance for the model year. Not a state certificate. If it is not ready,
+    ``next`` says what to do.
+    """
+    from .obd.inspection import ready_for_inspection as _check
+    return _check(car())
 
 
 def freeze_frame() -> dict:
