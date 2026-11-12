@@ -61,6 +61,7 @@ Common aliases:
 - `o2_b1s1`, `o2_b1s2` (upstream / downstream O2 volts)
 - `fuel`, `battery`, `ambient`, `oil_temp`, `fuel_rate`, `baro`, `runtime`
 - `distance_mil`, `distance_since_clear`, `warmups_since_clear`
+- Maker-specific Mode 22 readings come from vehicle packs (`packs/README.md`). Once a pack is installed, `signals("pack:")` lists its signals and `read()`/`read_many()`/`watch()` take them like built-ins.
 
 ## Working method
 

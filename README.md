@@ -194,7 +194,7 @@ Built in the open. See the [Roadmap](https://github.com/october-dev/car-use/issu
 The most useful things right now:
 - `dongle-doctor` reports from adapters you own;
 - virtual cars for problems you've fixed;
-- maker-specific data for your car.
+- maker-specific data for your car ([vehicle packs](packs/README.md)).
 
 ```bash
 git clone https://github.com/october-dev/car-use && cd car-use

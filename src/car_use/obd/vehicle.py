@@ -79,6 +79,7 @@ class ObdVehicle:
     def manifest(self) -> Manifest:
         sigs = [P.PIDS[p].signals[i].path for p in sorted(self.supported_pids()) if p in P.PIDS
                 for i in range(len(P.PIDS[p].signals))]
+        sigs.extend(did.vss for did in self._pack_dids() if did.vss)
         return Manifest(backend="obd", vehicle=self.describe(), signals=sigs,
                         capabilities=list(CAPABILITIES))
 
@@ -114,7 +115,8 @@ class ObdVehicle:
                     out.append({"alias": s.alias, "path": s.path, "unit": s.unit,
                                 "pid": f"01{pid:02X}", "description": s.description})
         for did in self._pack_dids():
-            if did.name.startswith(prefix) or did.vss.startswith(prefix) or prefix in ("", "pack"):
+            if did.name.startswith(prefix) or did.vss.startswith(prefix) \
+                    or prefix in ("", "pack", "pack:"):
                 out.append({"alias": did.name, "path": did.vss, "unit": did.unit,
                             "pid": f"22{did.did}", "description": did.description,
                             "ecu": did.ecu, "pack": True})
@@ -140,17 +142,17 @@ class ObdVehicle:
         from .packs import FormulaError, decode_payload
         now = time.time()
         source = f"obd:22{did.did}@{did.ecu}"
-        if did.ecu:
-            self.elm.at_ok("ATSH" + did.ecu)
         try:
-            payload = self.elm.query_one("22" + did.did)
-            value = decode_payload(did.formula, payload)
-        except (ElmError, FormulaError, ValueError) as e:
+            payloads = self.elm.query_targeted(did.ecu, "22" + did.did)
+        except ElmError as e:
+            if e.code == "NO DATA":
+                return Reading(did.name, did.vss, None, did.unit, now, f"{source} (no data)")
+            raise
+        try:
+            value = decode_payload(did.formula, payloads[0], bytes.fromhex(did.did))
+        except FormulaError as e:
             return Reading(did.name, did.vss, None, did.unit, now, f"{source} ({e})")
-        finally:
-            if did.ecu:
-                self.elm.at_ok("ATSH7DF")
-        return Reading(did.name, did.vss, value, did.unit, now, source)
+        return Reading(did.name, did.vss, round(value, 3), did.unit, now, source)
 
     def read(self, name: str) -> Reading:
         packed = self._read_pack(name)
@@ -168,7 +170,8 @@ class ObdVehicle:
         return Reading(sig.alias, sig.path, spec.decode(data)[idx], sig.unit, now, f"obd:01{spec.pid:02X}")
 
     def read_many(self, names: list[str]) -> dict[str, Reading]:
-        resolved = [(n, *P.resolve(n)) for n in names]
+        pack_names = [n for n in names if self._pack_did(n) is not None]
+        resolved = [(n, *P.resolve(n)) for n in names if n not in pack_names]
         pids_needed = list(dict.fromkeys(spec.pid for _, spec, _, _ in resolved))
         values: dict[int, bytes] = {}
         if self._multi_ok is not False and self.elm.info.is_can and len(pids_needed) > 1:
@@ -188,6 +191,8 @@ class ObdVehicle:
                 continue
             out[n] = Reading(sig.alias, sig.path, spec.decode(values[spec.pid])[idx], sig.unit,
                              now, f"obd:01{spec.pid:02X}")
+        for n in pack_names:
+            out[n] = self._read_pack(n)
         return out
 
     # -- diagnostics ---------------------------------------------------------------

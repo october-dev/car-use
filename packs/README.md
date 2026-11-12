@@ -6,14 +6,14 @@ car-use loads `packs/*.yaml` from this directory and `~/.car-use/packs/*.yaml`. 
 
 ```yaml
 name: example-counter
-description: Synthetic. Not a real manufacturer identifier. Do not copy the DID onto a real car.
+description: Synthetic example only. F190 is the standard VIN identifier; do not copy this DID onto a real car as a counter.
 match:
   wmi: ["ZZZ"]          # first three characters of the VIN
   year_from: 2010       # inclusive, optional
   year_to: 2019
 dids:
   - ecu: "7E0"          # physical request header (ATSH). Restored to 7DF afterwards.
-    id: "F190"
+    id: "F190"          # quoted four hex digits
     name: pack_counter
     formula: "A * 256 + B"   # A is the first data byte after 62 DID
     unit: count
@@ -23,6 +23,13 @@ dids:
 
 The formula may use `A` through `Z` (response bytes), numbers, `+ - * /`, and parentheses. Nothing else. A pack cannot import code.
 
+## What this loader supports
+
+- Mode 22 only, one request header per reading. The `ecu` value is the request header (e.g. `7E0`), three hex digits up to `7FF`; the replying ECU's response ID (e.g. `7E8`) is a different number.
+- 11-bit CAN protocols 6 and 8 only. Other protocols refuse a pack read before anything is sent.
+- Formulas cover whole bytes A-Z with arithmetic. There is no bit extraction, no two's-complement decoding, and no bytes past Z. A signal that needs those needs a loader extension first.
+- A pack signal must not reuse a built-in name, VSS path, or PID spelling. An invalid file is skipped with a diagnostic; it never breaks ordinary reads.
+
 ## Recording a response
 
 On a car you are allowed to talk to, with the ignition on:
@@ -30,11 +37,11 @@ On a car you are allowed to talk to, with the ignition on:
 ```bash
 car-use <<'PY'
 print(vin_info())
-print(raw_obd("22F190"))   # the DID you mean to document
+print([p.hex(" ").upper() for p in car().elm.query_targeted("7E0", "22F190")])
 PY
 ```
 
-Save the VIN's WMI and model year, the ECU header you used, the request, and the raw response. That recording is the test. Do not guess a DID from a forum post and present it as measured.
+`query_targeted` sends the request to that physical header and restores functional addressing afterwards. Save the VIN's WMI and model year, the ECU header you used, the request, and the raw response. That recording is the test. Do not guess a DID from a forum post and present it as measured.
 
 ## Contributing
 
