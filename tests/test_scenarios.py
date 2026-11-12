@@ -76,6 +76,10 @@ def test_cng_bifuel_looks_like_petrol_on_mode_01(sim):
 
 
 def test_obd_2b_answers_only_a_few_sensors(sim):
+    from car_use.obd.vin import decode as vin_decode
+    s = load("obd-2b")
+    assert vin_decode(s.vin)["model_year"] == 2025
+    assert "simplified" in s.notes
     v = sim("obd-2b")
     assert v.dtcs()["stored"] == []
     assert v.read("rpm").value > 500
@@ -84,10 +88,14 @@ def test_obd_2b_answers_only_a_few_sensors(sim):
     assert v.read("maf").value is None
     monitors = v.readiness()["monitors"]
     assert monitors["misfire"] == "complete"
+    # This profile's scope, not a rule of the standard: Stage II-B requires
+    # catalyst monitoring, so a real 2025 Activa may report it.
     assert "catalyst" not in monitors and "evap" not in monitors
 
 
 def test_healthy_ev_has_almost_no_engine_data(sim):
+    notes = load("healthy-ev").notes
+    assert "illustrative" in notes and "not a specific model" in notes
     v = sim("healthy-ev")
     assert v.dtcs()["stored"] == []
     assert v.read("speed").value == 0
@@ -95,4 +103,4 @@ def test_healthy_ev_has_almost_no_engine_data(sim):
     for name in ("rpm", "coolant", "o2_b1s1", "ltft1", "maf"):
         assert v.read(name).value is None
     assert "rpm" not in {s["alias"] for s in v.signals()}
-    assert "no data" in load("healthy-ev").notes or "nothing else" in load("healthy-ev").notes
+    assert "no data" in notes

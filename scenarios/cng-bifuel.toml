@@ -1,7 +1,9 @@
 notes = """CNG bi-fuel car running on gas, with nothing else wrong. Standard
-Mode 01 trims, oxygen sensors and load look like a healthy petrol car, so the
-fuel type is not something those sensors will tell you. DID F1E1 is
-simulator-only (not a real manufacturer address): 01 would be petrol, 02 is CNG."""
+Mode 01 trims, oxygen sensors and load look like a healthy petrol car, so
+those sensors will not tell you the fuel. (Standard fuel-type PID 0151 exists,
+but this profile does not answer it and the current decoder does not implement
+it.) DID F1E1 is simulator-only (not a real manufacturer address): 01 would be
+petrol, 02 is CNG."""
 
 [car]
 name = "2019 Maruti Suzuki WagonR CNG (sim)"

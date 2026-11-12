@@ -1,9 +1,10 @@
 notes = """Diesel particulate filter regeneration in progress, not a breakdown.
-The tell on generic OBD: compression-ignition bit set, idle held near 1000 rpm,
-and fuel rate several times a normal petrol idle, while coolant is already warm
-and there is no stored code. Mode 01 has no DPF soot PID. DID F1D0 in this
-scenario is simulator-only (not a real manufacturer address) and its single
-byte is soot load in percent."""
+Consistent with regen on generic OBD: compression-ignition bit set, idle held
+near 1000 rpm, and fuel rate several times a normal petrol idle, while coolant
+is already warm and there is no stored code. (Standard Mode 01 defines DPF
+pressure, temperature and status PIDs such as 017A/017C/018B; this profile
+does not answer them.) DID F1D0 in this scenario is simulator-only (not a
+real manufacturer address) and its single byte is soot load in percent."""
 
 [car]
 name = "2016 Volkswagen Jetta 2.0 TDI (sim)"

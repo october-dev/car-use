@@ -1,11 +1,14 @@
-notes = """OBD-2B scooter. The port answers rpm, speed, coolant, throttle and
-the 12 V supply, and the continuous monitors. It does not answer oxygen
-sensors, fuel trims, MAF or the catalyst/evap monitors. Missing sensors here
-are the protocol, not a fault. Nothing is wrong with this one."""
+notes = """2025 Honda Activa, OBD Stage II-B. This simplified teaching profile
+answers rpm, speed, coolant, throttle, runtime and the 12 V supply, plus the
+continuous monitors. It does not answer oxygen sensors, fuel trims, MAF or
+the catalyst/evap/o2 monitors. That small map is this profile's scope, not a
+rule of the standard: Stage II-B requires catalyst monitoring, so a real 2025
+Activa may report catalyst readiness this profile omits. Nothing is wrong with
+this one. Do not diagnose unanswered sensors as a fault."""
 
 [car]
-name = "2020 Honda Activa (sim)"
-vin = "ME4JC5AA1LA200002"
+name = "2025 Honda Activa OBD2B (sim)"
+vin = "ME4JC5AA3SA200002"
 protocol = "6"
 
 [adapter]

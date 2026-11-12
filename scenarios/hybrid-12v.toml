@@ -1,5 +1,7 @@
-notes = """Hybrid with a weak 12 V auxiliary battery. The traction battery does
-not appear on standard Mode 01. The engine is not running (rpm stays 0) while
+notes = """Hybrid with a weak 12 V auxiliary battery. This profile does not
+expose traction-battery data (standard Mode 01 PID 015B defines a
+hybrid-battery reading the current decoder does not implement). The engine is
+not running (rpm stays 0) while
 the car still answers, and the 12 V reading is about 11.8 V and falling, not
 the 13.8-14.6 V a DC-DC converter holds when the car is ready. P0562 is stored.
 Do not treat rpm 0 as a petrol car that stalled."""
