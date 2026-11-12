@@ -189,7 +189,10 @@ class Elm327:
             if _FRAME_IDX.match(s):
                 if multi is None:
                     multi = bytearray()
-                multi += bytes.fromhex(s[2:])
+                try:
+                    multi += bytes.fromhex(s[2:])
+                except ValueError:
+                    raise ElmError(req, "DATA ERROR") from None
                 continue
             if len(s) == 3 and _HEX.match(s):           # ISO-TP total length line
                 if multi is not None and multi_len:

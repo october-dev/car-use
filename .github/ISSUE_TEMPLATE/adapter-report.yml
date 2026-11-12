@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Run `car-use dongle-doctor --report` and paste that JSON. It keeps the WMI and model year only. Do not paste a full VIN, a candump, or a photo of the windshield.
+        Run `car-use dongle-doctor --report` and paste that JSON. It keeps the WMI and model year only. Do not paste a full VIN, a candump, or a photo of the windshield. Reports from the simulator (`"simulated": true`) are not accepted; only real adapters and cars.
 
         A field report soaks for 10 minutes (`--soak-seconds` defaults to 600). If you measured ignition-off current with a meter, pass `--current-ma`. car-use cannot measure current itself. Unplug the adapter when you leave the car.
   - type: textarea

@@ -13,7 +13,7 @@ No field reports are in this repository yet. A row is added only from an anonymi
 - adapter identity, grade, and which AT commands in the fingerprint did not answer
 - vehicle WMI (the first three VIN characters) and model year
 - protocol, supported Mode 01 PID count, whether the multi-frame VIN read was well formed, and whether DTC modes 03, 07 and 0A answered (not the codes)
-- soak error rate. The default soak is 600 seconds. Pass `--soak-seconds 0 --soak-requests N` for a short check.
+- soak error rate over a ten-minute soak with the ignition on (the JSON prints at the end). Pass `--soak-seconds 30` for a quick sample or `--soak-seconds 0` for a short 30-request check.
 
 ## Ignition-off current
 

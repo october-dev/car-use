@@ -28,7 +28,7 @@ _RESET_AFTER = {"ATCRA7E8": "ATAR", "ATCF7E8": "ATCF000", "ATCM7FF": "ATCM000",
 
 
 def run(elm: Elm327, vehicle=None, soak_requests: int = 30,
-        soak_seconds: float | None = None) -> dict:
+        soak_seconds: float | None = None, notice=None) -> dict:
     rep: dict = {"ts": time.time(), "steps": {}}
     s = rep["steps"]
 
@@ -91,9 +91,12 @@ def run(elm: Elm327, vehicle=None, soak_requests: int = 30,
         except (ElmError, TransportError) as e:
             s["multiframe_vin"] = {"error": str(e)}
 
+        if notice is not None:
+            notice()
         soak = _collect_soak(elm, soak_requests, soak_seconds)
         s["soak"] = {k: soak[k] for k in
-                     ("requests", "errors", "error_rate", "seconds", "target_seconds")}
+                     ("requests", "errors", "error_rate", "seconds", "target_seconds",
+                      "interrupted")}
         lat = soak["lat"]
         if lat:
             s["throughput"] = {"single_pid_per_s": round(1 / statistics.mean(lat), 1),
@@ -121,6 +124,7 @@ def _collect_soak(elm: Elm327, request_count: int, seconds: float | None) -> dic
     lat: list[float] = []
     errors = 0
     n = 0
+    interrupted = False
     t0 = time.monotonic()
     timed = seconds is not None and seconds > 0
     deadline = t0 + seconds if timed else None
@@ -134,13 +138,19 @@ def _collect_soak(elm: Elm327, request_count: int, seconds: float | None) -> dic
         try:
             elm.query_one("010C")
             lat.append(time.monotonic() - t)
-        except (ElmError, TransportError):
+        except TransportError:
+            # The link is gone. Stop at once: a dead socket fails instantly
+            # and would otherwise spin as "errors" until the deadline.
+            interrupted = True
+            break
+        except ElmError:
             errors += 1
     elapsed = time.monotonic() - t0
     return {"lat": lat, "requests": n, "errors": errors,
             "error_rate": round(errors / n, 4) if n else None,
             "seconds": round(elapsed, 2),
-            "target_seconds": seconds if timed else None}
+            "target_seconds": seconds if timed else None,
+            "interrupted": interrupted}
 
 
 def _probe_monitor(elm: Elm327) -> bool:
