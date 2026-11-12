@@ -1,0 +1,30 @@
+name: Adapter report
+description: Anonymised dongle-doctor report from an adapter and a car
+title: "Adapter report: "
+labels: ["area: adapters"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run `car-use dongle-doctor --report` and paste that JSON. It keeps the WMI and model year only. Do not paste a full VIN, a candump, or a photo of the windshield.
+
+        A field report soaks for 10 minutes (`--soak-seconds` defaults to 600). If you measured ignition-off current with a meter, pass `--current-ma`. car-use cannot measure current itself. Unplug the adapter when you leave the car.
+  - type: textarea
+    id: report
+    attributes:
+      label: Report JSON
+      description: The full output of `car-use dongle-doctor --report`.
+      render: json
+      placeholder: |
+        {
+          "schema": 1,
+          "vehicle": {"wmi": "4T1", "model_year": 2014}
+        }
+    validations:
+      required: true
+  - type: input
+    id: current-ma
+    attributes:
+      label: Ignition-off current (mA)
+      description: Optional meter reading with the ignition off. Leave empty if you did not measure it.
+      placeholder: "45"

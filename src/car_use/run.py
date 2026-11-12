@@ -18,7 +18,7 @@ USAGE = """Usage:
 Commands:
   car-use skill                    print the agent skill (SKILL.md)
   car-use doctor [--sim S]         check setup and the connection to the car
-  car-use dongle-doctor            characterise the adapter and grade it A-D
+  car-use dongle-doctor [--report] characterise the adapter; --report is anonymised JSON
   car-use scenarios                list simulator scenarios
   car-use sim [SCENARIO] [--port 35000]   serve a virtual car on TCP (foreground)
   car-use config set device URL    tcp://192.168.0.10:35000 | serial:///dev/cu.X?baud=38400 | sim:p0420
@@ -113,6 +113,39 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_dongle_doctor(args) -> int:
+    if getattr(args, "report", False):
+        from .connect import open_vehicle, NoDevice
+        from .doctor.report import field_soak_seconds, share_report
+        from .transport.base import TransportError
+        from .obd.elm import ElmError
+        try:
+            v = open_vehicle(_device(args))
+        except NoDevice as e:
+            print(f"no device: {e}")
+            return 1
+        except (TransportError, ElmError, OSError) as e:
+            print(f"status: {e}")
+            return 1
+        try:
+            try:
+                rep = share_report(
+                    v.elm, v,
+                    soak_requests=args.soak_requests,
+                    soak_seconds=field_soak_seconds(args.soak_seconds),
+                    current_ma=args.current_ma,
+                )
+            except ValueError as e:
+                print(f"report refused: {e}")
+                return 1
+        finally:
+            v.elm.close()
+            if getattr(v, "_emulator", None):
+                v._emulator.stop()
+        text = json.dumps(rep, indent=2)
+        if args.out:
+            Path(args.out).write_text(text + "\n", encoding="utf-8")
+        print(text)
+        return 0
     code = "rep = dongle_doctor()\nprint(json.dumps(rep, indent=2))\n"
     return run_script(code, _device(args))
 
@@ -250,10 +283,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--help", "-h", action="store_true")
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("skill")
-    for name in ("doctor", "dongle-doctor"):
-        sp = sub.add_parser(name)
-        sp.add_argument("--sim")
-        sp.add_argument("--device")
+    sp = sub.add_parser("doctor")
+    sp.add_argument("--sim")
+    sp.add_argument("--device")
+    sp = sub.add_parser("dongle-doctor")
+    sp.add_argument("--sim")
+    sp.add_argument("--device")
+    sp.add_argument("--report", action="store_true",
+                    help="print an anonymised JSON report (WMI and model year only)")
+    sp.add_argument("--out", help="also write the report JSON to this path")
+    sp.add_argument("--soak-requests", type=int, default=30)
+    sp.add_argument("--soak-seconds", type=float, default=None,
+                    help="soak length in seconds; --report defaults to 600")
+    sp.add_argument("--current-ma", type=float, default=None,
+                    help="ignition-off current from a meter; car-use does not measure it")
     sub.add_parser("scenarios")
     sp = sub.add_parser("sim")
     sp.add_argument("scenario", nargs="?", default="healthy")

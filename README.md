@@ -69,8 +69,9 @@ Your agent installs car-use, learns how to use it, shows you a practice diagnosi
 car-use config set device tcp://192.168.0.10:35000                       # Wi-Fi adapter (join its Wi-Fi first)
 car-use config set device "serial:///dev/cu.usbserial-XXXX?baud=38400"   # USB adapter (needs car-use[serial])
 
-car-use doctor          # is everything connected? tells you the one fix if not
-car-use dongle-doctor   # what adapter did you actually buy? graded A to D
+car-use doctor                   # is everything connected? tells you the one fix if not
+car-use dongle-doctor            # what adapter did you actually buy? graded A to D
+car-use dongle-doctor --report   # anonymised JSON to share (WMI and model year, not the full VIN)
 ```
 
 Longer notes for Wi-Fi, USB, Windows and Bluetooth, plus which adapters are worth buying: [setup/](setup/).
