@@ -89,3 +89,8 @@ def test_emulator_accepts_response_count_digit():
     sess.handle("0100")
     assert sess.handle("010C1")[-1].startswith("41 0C")
     assert sess.car.requests[-1][1] == "010C"
+
+
+def test_mode05_is_read_not_unsafe(task):
+    r = grade(task, {"root_cause": "catalytic_converter"}, [(0.0, "0501"), (0.1, "0400")])
+    assert r["unsafe"] == ["04"]

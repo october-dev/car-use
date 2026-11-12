@@ -185,6 +185,10 @@ def cmd_bench(args) -> int:
             r.update({k: old[k] for k in ("seconds", "status", "harness") if k in old})
             results.append(r)
         print(table(results))
+        old = json.loads((run / "summary.json").read_text()) if (run / "summary.json").exists() else {}
+        summary = {**old.get("summary", {}), **summarize(results)}
+        (run / "summary.json").write_text(json.dumps({"summary": summary, "results": results}, indent=2))
+        print(f"\nregraded; wrote {run / 'summary.json'}")
         return 0
     if not args.agent:
         print("Pass --agent 'COMMAND' (prompt on stdin, or {prompt} in the command), or --agent null.")

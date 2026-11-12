@@ -20,7 +20,7 @@ from ..model.capability import Tier
 
 # OBD/UDS services that only read. Everything else is refused on the raw path.
 READ_SERVICES = {
-    0x01: "current data", 0x02: "freeze frame", 0x03: "stored DTCs",
+    0x01: "current data", 0x02: "freeze frame", 0x03: "stored DTCs", 0x05: "O2 sensor monitoring results (non-CAN cars)",
     0x06: "monitor test results", 0x07: "pending DTCs", 0x09: "vehicle info",
     0x0A: "permanent DTCs", 0x19: "UDS read DTC information", 0x22: "UDS read data by identifier",
 }
