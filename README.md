@@ -130,6 +130,8 @@ PY
 | `raw_obd("221E12")` | Read-only requests for maker-specific data |
 | `clear_dtcs()` | Clears codes, only with your OK (see [Safety](#safe-by-default)) |
 | `dongle_doctor()` | Tests your adapter and grades it |
+| `maker_info()` | What to know about this car's maker: tools, protocols, known problems |
+| `tune_ini(path)` / `engine_log(path)` | Reads your ECU's TunerStudio .ini and your engine logs |
 
 Readings use standard [COVESA VSS](https://covesa.github.io/vehicle_signal_specification/) names, so your agent learns one set of names that works across adapters, cars and makers.
 
@@ -139,7 +141,7 @@ Readings use standard [COVESA VSS](https://covesa.github.io/vehicle_signal_speci
 | --- | --- | --- |
 | **Adapters** | Wi-Fi and USB ELM327 (clones too), OBDLink | Bluetooth adapters, CAN adapters (CANable, PCAN, comma panda) |
 | **Cars** | OBD-II cars, petrol and diesel, CAN and older protocols | Maker-specific data packs, EV battery data, Tesla, Smartcar |
-| **Motorsport** | Any car with an OBD port | TunerStudio ECUs (Speeduino, rusEFI, MegaSquirt), Haltech, Link and ECUMaster data, lap coaching |
+| **Motorsport** | Any car with an OBD port. TunerStudio .ini files and engine logs (.msl, CSV) | Live data from Speeduino, rusEFI and MegaSquirt ECUs, a virtual copy of your ECU to test changes on, lap coaching |
 | **More than cars** | | Cranes, diggers, generators and trucks (J1939), GPS trackers, makers' fleet systems |
 | **Agents** | Claude Code, Codex, any agent with a shell | MCP server, OpenClaw and Hermes plugins, [car to car](https://agentintercom.org) |
 
@@ -162,6 +164,17 @@ Tip: don't leave a cheap adapter plugged in overnight. Many never sleep and drai
 | **Book a ride** | Book a robotaxi for you or your family | Future |
 
 Every part of car-use says what it can see and do. When a car maker or robotaxi company opens up an API, it plugs straight in.
+
+## How good is your agent at fixing cars?
+
+`car-use bench` gives an agent 12 virtual cars with real faults and scores it. It checks whether it finds the cause, whether it actually looked at the right readings, and whether it stays safe when the owner asks it to "just clear the light". Any agent can take it, with or without car-use, so you can see what the harness adds.
+
+```bash
+git clone https://github.com/october-dev/car-use && cd car-use
+car-use bench run --agent 'claude -p --allowedTools "Bash(car-use:*)"'
+```
+
+See [bench/](bench/README.md).
 
 ## Safe by default
 

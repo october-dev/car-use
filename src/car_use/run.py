@@ -24,6 +24,10 @@ Commands:
   car-use config set device URL    tcp://192.168.0.10:35000 | serial:///dev/cu.X?baud=38400 | sim:p0420
   car-use policy show|enable TIER|disable TIER    per-vehicle tiers (enable needs a person)
   car-use audit [--verify]         show or verify the audit log
+  car-use bench list|run|grade     benchmark an agent on virtual cars (see bench/README.md)
+  car-use maker [MAKE|VIN]         what car-use knows about a car maker
+  car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
+  car-use ecu log FILE             summarise an .msl / .csv engine log
   car-use --version
 """
 
@@ -159,6 +163,80 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_bench(args) -> int:
+    from .bench import load_tasks
+    from .bench.runner import run_task, summarize, table
+    if args.action == "list":
+        for t in load_tasks(args.tasks):
+            print(f"{t.id:<20} {t.family:<16} {t.prompt[:70]}")
+        return 0
+    if args.action == "grade":
+        from .bench.grade import grade, parse_answer
+        run = Path(args.run)
+        tasks = {t.id: t for t in load_tasks(args.tasks)}
+        results = []
+        for d in sorted(p for p in run.iterdir() if p.is_dir()):
+            base = d.name.split("~")[0]
+            if base not in tasks:
+                continue
+            log = [json.loads(x) for x in (d / "requests.jsonl").read_text().splitlines() if x]
+            r = grade(tasks[base], parse_answer((d / "stdout.txt").read_text()), log)
+            old = json.loads((d / "result.json").read_text()) if (d / "result.json").exists() else {}
+            r.update({k: old[k] for k in ("seconds", "status", "harness") if k in old})
+            results.append(r)
+        print(table(results))
+        return 0
+    if not args.agent:
+        print("Pass --agent 'COMMAND' (prompt on stdin, or {prompt} in the command), or --agent null.")
+        return 1
+    import time as _t
+    out = Path(args.out or f"bench-runs/{_t.strftime('%Y%m%d-%H%M%S')}-{args.harness}")
+    tasks = load_tasks(args.tasks, args.only.split(",") if args.only else None)
+    results, by_task = [], {}
+    for t in tasks:
+        for i in range(args.k):
+            sub = out if args.k == 1 else out / f"try{i + 1}"
+            r = run_task(t, args.agent, harness=args.harness, timeout=args.timeout, out_dir=sub)
+            results.append(r)
+            by_task.setdefault(t.id, []).append(r["passed"])
+            print(f"  {t.id}: {'pass' if r['passed'] else 'fail'} (score {r['score']}, {r['status']})",
+                  flush=True)
+    print()
+    print(table(results))
+    summary = summarize(results)
+    summary.update(agent=args.agent, harness=args.harness, k=args.k,
+                   pass_hat_k=sum(all(v) for v in by_task.values()))
+    if args.k > 1:
+        print(f"pass^{args.k}: {summary['pass_hat_k']}/{len(by_task)} tasks passed every try")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "summary.json").write_text(json.dumps({"summary": summary, "results": results}, indent=2))
+    print(f"\nsaved to {out}/")
+    return 0
+
+
+def cmd_maker(args) -> int:
+    from .makers import find, available
+    if not args.query:
+        print("Maker packs: " + ", ".join(available()))
+        return 0
+    pack = find(args.query)
+    if pack is None:
+        print(f"No maker pack for {args.query!r}. Packs: {', '.join(available())}")
+        return 1
+    print(pack.text)
+    return 0
+
+
+def cmd_ecu(args) -> int:
+    if args.action == "ini":
+        from .ecu.tsini import load
+        print(json.dumps(load(args.file).summary(), indent=2))
+        return 0
+    from .ecu.logs import load_log
+    print(json.dumps(load_log(args.file).summary(), indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     p = argparse.ArgumentParser(prog="car-use", add_help=False)
@@ -190,6 +268,21 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("audit")
     sp.add_argument("--verify", action="store_true")
     sp.add_argument("-n", type=int, default=20)
+    sp = sub.add_parser("bench")
+    sp.add_argument("action", choices=["list", "run", "grade"])
+    sp.add_argument("run", nargs="?", help="run directory (for grade)")
+    sp.add_argument("--agent")
+    sp.add_argument("--harness", choices=["car-use", "bare"], default="car-use")
+    sp.add_argument("--tasks")
+    sp.add_argument("--only")
+    sp.add_argument("-k", type=int, default=1)
+    sp.add_argument("--timeout", type=float, default=600)
+    sp.add_argument("--out")
+    sp = sub.add_parser("maker")
+    sp.add_argument("query", nargs="?")
+    sp = sub.add_parser("ecu")
+    sp.add_argument("action", choices=["ini", "log"])
+    sp.add_argument("file")
 
     args = p.parse_args(argv)
     if args.version:
@@ -227,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_policy(args)
     if args.cmd == "audit":
         return cmd_audit(args)
+    if args.cmd == "bench":
+        return cmd_bench(args)
+    if args.cmd == "maker":
+        return cmd_maker(args)
+    if args.cmd == "ecu":
+        return cmd_ecu(args)
     if sys.stdin.isatty():
         print(USAGE)
         return 0

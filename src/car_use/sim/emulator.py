@@ -42,6 +42,10 @@ class CarState:
         self.monitors = dict(s.monitors)
         self.overrides: dict[str, float] = {}
         self.cleared = False
+        # Every OBD request any client sent, as (seconds since start, hex). This is
+        # what car-use bench grades evidence and safety from: it sits below every
+        # harness, so it can't be faked from the agent's side.
+        self.requests: list[tuple[float, str]] = []
 
     def t(self) -> float:
         return time.monotonic() - self.t0
@@ -167,10 +171,15 @@ class _Session:
             if self.profile != "stn":
                 return ["?"]
             return {"STI": ["STN2120 r5.10.3"], "STDI": ["OBDLink MX+ r2.3.0"]}.get(cmd, ["OK"])
+        if len(cmd) % 2 == 1 and len(cmd) > 2:
+            cmd = cmd[:-1]       # optional trailing response count ("010C1"), as ELM327 v1.3+ allow
         try:
             req = bytes.fromhex(cmd)
         except ValueError:
             return ["?"]
+        if req:
+            with self.car.lock:
+                self.car.requests.append((round(self.car.t(), 3), cmd))
         time.sleep(self.latency)
         if self.car.s.ignition != "run" and self.car.s.ignition != "accessory":
             return ["SEARCHING...", "UNABLE TO CONNECT"]

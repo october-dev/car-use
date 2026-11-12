@@ -15,7 +15,8 @@ _state: dict = {"vehicle": None, "device": None}
 
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
            "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
-           "dongle_doctor", "scenarios", "describe_dtc", "Series"]
+           "dongle_doctor", "scenarios", "describe_dtc", "maker_info", "tune_ini", "engine_log",
+           "Series"]
 
 
 def _configure(device: str | None) -> None:
@@ -154,6 +155,34 @@ def clear_dtcs():
 def describe_dtc(code: str) -> str:
     from .obd.dtc_info import describe
     return describe(code)
+
+
+def maker_info(query: str | None = None) -> str:
+    """What car-use knows about this car's maker (by VIN, or pass a make/VIN).
+
+    Facts are tagged [verified], [common] or [unverified]; treat [unverified] as a lead.
+    """
+    from .makers import find, available
+    q = query or car().vin
+    pack = find(q) if q else None
+    if pack is None:
+        return f"No maker pack for {q!r} yet. Packs: {', '.join(available())}"
+    return pack.text
+
+
+def tune_ini(path: str, defines: tuple[str, ...] = ()):
+    """Parse an ECU's TunerStudio .ini: .tables(), .channels, .summary(), .decode_channels(block).
+
+    defines: TunerStudio preferences such as ("CELSIUS",) so units match the user's setup.
+    """
+    from .ecu.tsini import load
+    return load(path, set(defines))
+
+
+def engine_log(path: str):
+    """Read a .msl / CSV engine log: .columns, .column(name), .stats(name), .summary()."""
+    from .ecu.logs import load_log
+    return load_log(path)
 
 
 def dongle_doctor(save: bool = True) -> dict:

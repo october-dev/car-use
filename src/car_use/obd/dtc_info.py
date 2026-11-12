@@ -32,6 +32,7 @@ GENERIC = {
     "P0440": "Evaporative emission system malfunction",
     "P0442": "Evaporative emission system leak detected (small leak)",
     "P0455": "Evaporative emission system leak detected (large leak)",
+    "P0457": "Evaporative emission system leak detected (fuel cap loose or off)",
     "P0456": "Evaporative emission system leak detected (very small leak)",
     "P0500": "Vehicle speed sensor A",
     "P0505": "Idle air control system",

@@ -1,0 +1,18 @@
+id = "misfire"
+family = "discriminate"
+canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+prompt = "The car shakes at traffic lights and the engine light came on. Is it serious?"
+answer = ["ignition_coil", "spark_plug", "need_more_data"]
+partial = ["vacuum_leak", "fuel_delivery", "low_compression", "fuel_injector"]
+evidence = [
+  { need = "codes" },
+  { need = "pending" },
+  { need = "watch", pid = "0C", seconds = 5 },
+]
+
+[sim]
+base = "p0300"
+
+[sim.car]
+name = "2014 Kia Rio 1.6"
+vin = "KNADM4A30E6000300"

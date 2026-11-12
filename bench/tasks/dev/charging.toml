@@ -1,0 +1,17 @@
+id = "charging"
+family = "single-fault"
+canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+prompt = "The battery light flickered on the way home and now the check engine light is on too."
+answer = ["alternator_charging"]
+partial = ["battery_weak", "wiring_or_connector"]
+evidence = [
+  { need = "codes" },
+  { need = "watch", pid = "42", seconds = 5 },
+]
+
+[sim]
+base = "dying-battery"
+
+[sim.car]
+name = "2015 Honda Civic 1.8"
+vin = "2HGFB2F56FH000562"

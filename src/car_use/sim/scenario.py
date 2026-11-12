@@ -86,11 +86,26 @@ def load(name_or_path: str) -> Scenario:
                                     + ", ".join(sorted(scen)))
         p = scen[name_or_path]
     data = tomllib.loads(p.read_text(encoding="utf-8"))
+    return from_dict(data, name=p.stem, source=str(p))
+
+
+def from_dict(data: dict, name: str, source: str = "") -> Scenario:
     car = data.get("car", {})
     return Scenario(
-        name=p.stem, title=car.get("name", p.stem), vin=car.get("vin", "1CARUSE0000000000"),
+        name=name, title=car.get("name", name), vin=car.get("vin", "1CARUSE0000000000"),
         protocol=str(car.get("protocol", "6")), ignition=car.get("ignition", "run"),
         adapter=data.get("adapter", {}), signals=data.get("signals", {}),
         dtcs=data.get("dtcs", {}), monitors=data.get("monitors", {}),
         freeze_frame=data.get("freeze_frame", {}), dids=data.get("dids", {}),
-        notes=data.get("notes", ""), source=str(p))
+        notes=data.get("notes", ""), source=source)
+
+
+def read_raw(name_or_path: str) -> dict:
+    """The scenario's TOML as a dict (for tools that layer changes on top)."""
+    p = Path(name_or_path)
+    if not p.suffix:
+        scen = available()
+        if name_or_path not in scen:
+            raise FileNotFoundError(f"No scenario {name_or_path!r}")
+        p = scen[name_or_path]
+    return tomllib.loads(p.read_text(encoding="utf-8"))

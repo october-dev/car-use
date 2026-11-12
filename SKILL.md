@@ -51,6 +51,9 @@ The person plugs things in and turns keys. You never ask them to do anything whi
 - `raw_obd("0105")`: read-only raw request. Allowed services: 01, 02, 03, 06, 07, 09, 0A, 19, 22. Everything else is refused by the kernel.
 - `clear_dtcs()`: tier T1D. See Consent.
 - `describe_dtc("P0420")`, `dongle_doctor()`, `scenarios()`.
+- `maker_info()`: what car-use knows about this car's maker (looked up from the VIN, or pass a make). Protocols, the dealer tool, known patterns. Facts are tagged `[verified]`, `[common]` or `[unverified]`. Treat `[unverified]` as a lead and say so if you use it. Also on the command line: `car-use maker toyota`.
+- `tune_ini(path, defines=())`: parse a TunerStudio-compatible ECU's `.ini` (Speeduino, rusEFI, MegaSquirt): `.tables()`, `.channels`, `.summary()`. Pass `defines=("CELSIUS",)` if the user runs TunerStudio in Celsius. Read-only: car-use does not write tunes.
+- `engine_log(path)`: read an `.msl` or CSV engine log (MegaLogViewer, Haltech, Link, ECUMaster exports): `.columns`, `.column(name)`, `.stats(name)`, `.summary()`. Binary `.mlg`: ask the user to export `.msl` or CSV.
 
 Common aliases:
 - `rpm`, `speed`, `coolant`, `load`, `throttle`, `map`, `maf`, `iat`, `timing`
@@ -61,7 +64,7 @@ Common aliases:
 
 ## Working method
 
-1. **Identify first.** Run `car().describe()` and `vin_info()`. Say which car and adapter you are talking to. If it is simulated, say so.
+1. **Identify first.** Run `car().describe()`, `vin_info()` and `maker_info()`. Say which car and adapter you are talking to. If it is simulated, say so.
 2. **Codes, then context.** `dtcs()` → `freeze_frame()` → `readiness()`. A code tells you which monitor failed, not which part is broken.
 3. **Confirm with live data before naming a cause.** Choose the signals that would distinguish the candidate causes, then `watch()` them. Examples:
    - **Catalyst (P0420):** compare `o2_b1s1` and `o2_b1s2`. A downstream sensor switching like the upstream one means the catalyst isn't storing oxygen.
@@ -103,4 +106,5 @@ This is a real car that belongs to a person.
 
 - OBD-II Mode 01/02/03/07/09/0A and Mode 22 reads through `raw_obd`. No BLE yet. No CAN sniffing yet.
 - KWP2000, ISO 9141-2 and J1850 cars (older Maruti, many pre-2008 cars) are read like CAN cars, but so far only against the simulator's `kwp2000` and `iso9141` virtual cars, not real ones. Connecting can take several seconds longer than on CAN.
-- Multi-ECU replies are merged. Manufacturer-specific codes need vehicle packs (coming).
+- Multi-ECU replies are merged. Maker packs are early: few makers, and no maker-specific data identifiers yet.
+- Aftermarket ECUs: `.ini` parsing and log reading only. Live connection to Speeduino/rusEFI over their own protocol is coming.

@@ -1,0 +1,26 @@
+id = "lazy-front-o2"
+family = "red-herring"
+canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+prompt = "The light says something about the catalytic converter. Do I need a new one? They're expensive."
+answer = ["o2_sensor_upstream"]
+partial = ["need_more_data"]
+evidence = [
+  { need = "codes" },
+  { need = "watch", pid = "14", seconds = 5 },
+  { need = "watch", pid = "15", seconds = 5 },
+]
+
+[sim]
+base = "p0420"
+
+[sim.car]
+name = "2012 Toyota Corolla 1.8 (sim)"
+vin = "2T1BU4EE2CC000133"
+
+[sim.signals]
+o2_b1s1 = { wave = "sine", min = 0.35, max = 0.55, period = 6.0 }
+o2_b1s2 = { value = 0.66, jitter = 0.02 }
+
+[sim.dtcs]
+stored = ["P0420", "P0133"]
+permanent = ["P0420", "P0133"]

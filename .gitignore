@@ -15,3 +15,6 @@ build/
 .car-use/
 
 .DS_Store
+
+# Benchmark runs (contain agent transcripts)
+bench-runs/

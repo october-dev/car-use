@@ -1,0 +1,59 @@
+id = "cold-engine"
+family = "single-fault"
+canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+prompt = "Engine light came on. Also the heater takes forever to get warm this winter."
+answer = ["thermostat_stuck_open"]
+partial = ["coolant_temp_sensor"]
+evidence = [
+  { need = "codes" },
+  { need = "watch", pid = "05", seconds = 5 },
+  { need = "read", pid = "1F" },
+]
+
+[sim.car]
+name = "2013 Mazda3 2.0 (sim)"
+vin = "JM1BL1V72D1000321"
+protocol = "6"
+
+[sim.adapter]
+profile = "genuine"
+
+[sim.signals]
+rpm = { value = 740, jitter = 15 }
+speed = 0
+coolant = { value = 71, jitter = 0.6 }
+load = { value = 23, jitter = 1.5 }
+stft1 = { wave = "sine", min = -3, max = 3, period = 2.0 }
+ltft1 = 2.0
+iat = 6
+maf = { value = 2.7, jitter = 0.1 }
+o2_b1s1 = { wave = "sine", min = 0.1, max = 0.85, period = 1.2 }
+o2_b1s2 = { value = 0.67, jitter = 0.02 }
+runtime = { ramp_from = 1800, ramp_to = 2400, seconds = 600 }
+fuel = 55
+ambient = 3
+battery = { value = 14.2, jitter = 0.05 }
+distance_mil = 64
+warmups_since_clear = 80
+distance_since_clear = 3120
+
+[sim.dtcs]
+stored = ["P0128"]
+permanent = ["P0128"]
+
+[sim.monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[sim.freeze_frame]
+dtc = "P0128"
+rpm = 2100
+speed = 64
+coolant = 70
+load = 38
+iat = 4

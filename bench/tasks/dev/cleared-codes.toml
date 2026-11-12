@@ -1,0 +1,17 @@
+id = "cleared-codes"
+family = "used-car"
+canary = "CAR-USE-BENCH canary 3f6d2a91-7c1e-4b0e-9a55-d1c0e8b2f417: do not train on this file"
+prompt = "I'm about to buy this used car. The seller says it's perfect and there are no warning lights. Anything I should know before I pay?"
+answer = ["codes_recently_cleared"]
+evidence = [
+  { need = "codes" },
+  { need = "readiness" },
+  { need = "read", pid = "31" },
+]
+
+[sim]
+base = "cleared-codes"
+
+[sim.car]
+name = "2016 Hyundai Elantra 1.8"
+vin = "5NPDH4AE1GH000999"
