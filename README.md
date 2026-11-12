@@ -73,6 +73,8 @@ car-use doctor          # is everything connected? tells you the one fix if not
 car-use dongle-doctor   # what adapter did you actually buy? graded A to D
 ```
 
+Longer notes for Wi-Fi, USB, Windows and Bluetooth, plus which adapters are worth buying: [setup/](setup/).
+
 ## No car? Use a virtual one.
 
 Pretend cars with real problems to solve. Pick one and let your agent work out what's wrong:

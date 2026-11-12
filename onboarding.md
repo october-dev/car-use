@@ -8,7 +8,7 @@ Walk the person through this, one step at a time. Wait for them where a step nee
    - An OBD-II adapter? Which kind: Wi-Fi, USB, or Bluetooth (BLE isn't supported yet).
    - Which car (make, model, year, country)?
    - Is the car nearby, with the ignition able to be turned on?
-4. **Connect.** The person does these steps:
+4. **Connect.** The person does these steps. The longer notes are at https://github.com/october-dev/car-use/tree/main/setup (Wi-Fi, USB, Windows, Bluetooth, and the doctor troubleshooting table).
    - Plug the adapter into the OBD-II port, usually under the dashboard on the driver's side.
    - Turn the ignition on. Engine running is best, in a ventilated place, never in a closed garage.
    - Wi-Fi adapter: join its network, then run `car-use config set device tcp://192.168.0.10:35000`. If that address fails, try `192.168.1.10`.
