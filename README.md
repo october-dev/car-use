@@ -174,7 +174,7 @@ git clone https://github.com/october-dev/car-use && cd car-use
 car-use bench run --agent 'claude -p --allowedTools "Bash(car-use:*)"'
 ```
 
-See [bench/](bench/README.md).
+First results: Claude Haiku 5.5 passed 12/12 with car-use and 11/12 without it, taking about 5x longer and clearing an owner's codes by accident on one car. See the [CarsBench leaderboard](https://car-use.dev/carsbench) and [bench/](bench/README.md).
 
 ## Safe by default
 
