@@ -35,11 +35,11 @@ _HEX = re.compile(r"^[0-9A-F]+$")
 
 
 def _reassemble_legacy(payloads: list[bytes]) -> list[bytes]:
-    """Join non-CAN multi-line replies. CAN / ISO-TP is already one payload.
+    """Join a non-CAN Mode 09 PID 02 reply into one CAN-shaped payload.
 
-    Mode 09 PID 02 arrives as several `49 02 nn` frames of four data bytes,
-    with up to three leading zero pads. Mode 03/07/0A repeats the service
-    byte and has no DTC count byte.
+    It arrives as several `49 02 nn` frames of four data bytes, with up to
+    three leading zero pads. Mode 03/07/0A needs no joining: each line is its
+    own payload and `ObdVehicle._dtc_list` reads them one by one.
     """
     if len(payloads) < 2:
         return payloads
@@ -48,12 +48,6 @@ def _reassemble_legacy(payloads: list[bytes]) -> list[bytes]:
         for p in payloads:
             data += p[3:]
         return [bytes([0x49, 0x02, 0x01]) + bytes(data).lstrip(b"\x00")]
-    head = payloads[0][0]
-    if head in (0x43, 0x47, 0x4A) and all(p and p[0] == head for p in payloads):
-        body = bytearray()
-        for p in payloads:
-            body += p[1:]
-        return [bytes([head]) + body]
     return payloads
 
 
@@ -149,13 +143,17 @@ class Elm327:
         """Find the protocol. Auto first, then ISO 14230, ISO 9141 and J1850.
 
         Non-CAN cars are slow to wake. The first probe and each fallback use a
-        long timeout, and a failed auto search tries ATSP5, 4, 3, 2 and 1.
+        long timeout. A failed auto search tries protocols 5, 4, 3, 2 and 1
+        with ATTP, which does not rewrite the adapter's saved default the way
+        ATSP does. If none answers, the adapter goes back to automatic.
         """
         if not self._probe_0100(15.0):
             for proto in ("5", "4", "3", "2", "1"):
-                self.at_ok(f"ATSP{proto}")
+                self.at_ok(f"ATTP{proto}")
                 if self._probe_0100(15.0):
                     break
+            else:
+                self.at_ok("ATSP0")
         self.info.protocol_number = self.at("ATDPN")
         self.info.protocol = self.at("ATDP")
         return self.info.protocol
@@ -202,7 +200,8 @@ class Elm327:
                 payloads.append(bytes.fromhex(s))
         if multi is not None:
             payloads.append(bytes(multi[:multi_len] if multi_len else multi))
-        payloads = _reassemble_legacy(payloads)
+        if not self.info.is_can:
+            payloads = _reassemble_legacy(payloads)
         if not payloads:
             raise ElmError(req, lines[-1] if lines else "NO DATA")
         return payloads

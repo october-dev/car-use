@@ -40,11 +40,8 @@ def test_reassemble_non_can_vin_and_dtcs():
     ]
     joined = _reassemble_legacy(frames)
     assert joined == [bytes.fromhex("490201") + b"1ABCDEFGH"]
-    dtcs = _reassemble_legacy([
-        bytes.fromhex("430133000701"),
-        bytes.fromhex("430300010128"),
-    ])
-    assert dtcs == [bytes.fromhex("4301330007010300010128")]
+    dtc_lines = [bytes.fromhex("430133000701"), bytes.fromhex("430300010128")]
+    assert _reassemble_legacy(dtc_lines) == dtc_lines
     assert _reassemble_legacy([bytes.fromhex("4100BE1FA813")])[0].hex() == "4100be1fa813"
 
 
@@ -58,7 +55,7 @@ def test_auto_search_falls_back_to_kwp():
                 return b"SEARCHING...\rUNABLE TO CONNECT\r>"
             if cmd == "0100":
                 return b"4100BE1FA813\r>"
-            if cmd.startswith("ATSP"):
+            if cmd.startswith(("ATSP", "ATTP")):
                 state["protocol"] = cmd[4:]
                 return b"OK\r>"
             if cmd == "ATDPN":
@@ -121,3 +118,29 @@ def test_kwp2000_and_iso9141_virtual_cars(sim):
     assert iso.dtcs()["stored"] == ["P0301"]
     assert iso.readiness()["monitors"]["catalyst"] == "complete"
     assert iso.readiness()["monitors"]["misfire"] == "incomplete"
+
+
+def test_can_replies_from_two_ecus_stay_separate():
+    elm = Elm327(_Scripted({
+        "ATDPN": b"A6\r>",
+        "ATDP": b"AUTO, ISO 15765-4 (CAN 11/500)\r>",
+        "0100": b"4100BE1FA813\r>",
+        "03": b"43010700\r43010741\r>",   # engine P0700, transmission P0741
+    }))
+    v = ObdVehicle(elm, "sim:script", kernel=Kernel(confirm=lambda _q, _e: False)).connect()
+    assert v.elm.info.is_can
+    assert v._dtc_list("03") == ["P0700", "P0741"]
+
+
+def test_no_answer_goes_back_to_automatic(sim):
+    off = sim("ignition-off")
+    sent = [cmd for _t, cmd, _r in off.elm.log]
+    assert [c for c in sent if c.startswith("ATTP")] == ["ATTP5", "ATTP4", "ATTP3", "ATTP2", "ATTP1"]
+    assert [c for c in sent if c.startswith("ATSP")] == ["ATSP0", "ATSP0"]
+    assert off.elm.info.protocol_number in ("0", "A0")
+
+
+def test_doctor_names_the_ignition_fix(capsys):
+    from car_use.run import main
+    assert main(["doctor", "--sim", "ignition-off"]) == 1
+    assert "Turn the ignition on" in capsys.readouterr().out
