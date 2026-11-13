@@ -1,0 +1,38 @@
+notes = """Hybrid with a weak 12 V auxiliary battery. This profile does not
+expose traction-battery data (standard Mode 01 PID 015B defines a
+hybrid-battery reading the current decoder does not implement). The engine is
+not running (rpm stays 0) while
+the car still answers, and the 12 V reading is about 11.8 V and falling, not
+the 13.8-14.6 V a DC-DC converter holds when the car is ready. P0562 is stored.
+Do not treat rpm 0 as a petrol car that stalled."""
+
+[car]
+name = "2018 Toyota Prius (sim)"
+vin = "JTDKB3FU4J3120012"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+rpm = 0
+speed = 0
+coolant = 28
+battery = { ramp_from = 11.8, ramp_to = 11.2, seconds = 600 }
+ambient = 19
+runtime = 0
+
+[dtcs]
+stored = ["P0562"]
+permanent = ["P0562"]
+
+[monitors]
+misfire = "incomplete"
+fuel_system = "incomplete"
+components = "complete"
+
+[freeze_frame]
+dtc = "P0562"
+rpm = 0
+speed = 0
+coolant = 26

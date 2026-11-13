@@ -1,0 +1,26 @@
+notes = """Simplified illustrative EV profile, not a specific model: generic
+OBD answers speed, the 12 V system and ambient temperature, and almost
+nothing else. No rpm, no coolant, no oxygen sensors, no fuel trims, and no
+stored codes. Real EVs vary widely — some answer more (a published Bolt scan
+shows rpm and coolant on an auxiliary controller), others answer nothing over
+generic OBD — so a missing engine PID here is 'no data', not an engine fault.
+Do not invent one."""
+
+[car]
+name = "Illustrative electric car (sim, generic profile)"
+vin = "ILLUSTRATIVE-EV00"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+speed = 0
+battery = { value = 14.1, jitter = 0.04 }
+ambient = 22
+
+[dtcs]
+stored = []
+
+[monitors]
+components = "complete"

@@ -111,6 +111,13 @@ PY
 | `ignition-off` | The adapter has power but the car doesn't answer. | Easy |
 | `kwp2000` | Older car on KWP2000, not CAN. Several codes, slow to wake. | Medium |
 | `iso9141` | Older car on ISO 9141-2. One code. | Medium |
+| `p0128` | Thermostat stuck open. Coolant stays low after a long idle. | Easy |
+| `p0442` | Small evap leak. The car drives normally. | Easy |
+| `dpf-regen` | Diesel filter regenerating. Idle and fuel use are high. | Medium |
+| `hybrid-12v` | Hybrid with a weak 12 V battery. The engine is not running. | Easy |
+| `cng-bifuel` | CNG car. The usual sensors look like a petrol car. | Tricky |
+| `obd-2b` | 2025 scooter on OBD Stage II-B. Only a few sensors answer. | Easy |
+| `healthy-ev` | Illustrative EV profile, not a real model. Almost no engine data, and nothing is wrong. | Tricky |
 
 Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
 

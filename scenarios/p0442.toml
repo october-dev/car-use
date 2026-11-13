@@ -1,0 +1,58 @@
+notes = """P0442 evaporative emission system leak detected (small leak). Nothing
+in the way the car drives points at it: fuel trims stay near zero, the idle
+is steady, and the oxygen sensors look normal. The evap monitor has completed
+and stored the code. A loose fuel cap is the first thing to check; the
+drivability data will not confirm or deny that."""
+
+[car]
+name = "2014 Chevrolet Cruze 1.4 (sim)"
+vin = "1G1ZB5E17EF104420"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+rpm = { value = 720, jitter = 10 }
+speed = 0
+coolant = { value = 91, jitter = 0.4 }
+load = { value = 18, jitter = 1 }
+stft1 = { value = 0.6, jitter = 1 }
+ltft1 = 0.8
+map = { value = 30, jitter = 1 }
+timing = 11
+iat = 28
+maf = { value = 2.3, jitter = 0.1 }
+throttle = 13
+o2_b1s1 = { wave = "sine", min = 0.1, max = 0.85, period = 1.2 }
+o2_b1s2 = { value = 0.67, jitter = 0.02 }
+runtime = 640
+fuel = 48
+warmups_since_clear = 22
+distance_since_clear = 540
+distance_mil = 36
+baro = 99
+battery = { value = 14.2, jitter = 0.04 }
+ambient = 22
+
+[dtcs]
+stored = ["P0442"]
+permanent = ["P0442"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[freeze_frame]
+dtc = "P0442"
+rpm = 1600
+speed = 54
+coolant = 90
+load = 28
+stft1 = 1.1
+ltft1 = 0.8

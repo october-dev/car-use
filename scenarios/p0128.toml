@@ -1,0 +1,58 @@
+notes = """P0128 coolant thermostat below regulating temperature. The engine has
+already been idling for about 15 minutes and the coolant is still far below
+the ~88 C a closed thermostat holds. It climbs only a few degrees over the
+next 15 minutes. A thermostat stuck open, a missing thermostat, or a coolant
+temperature sensor reading low all look like this; the sensor is the one to
+check first if the heater is actually hot."""
+
+[car]
+name = "2012 Toyota Camry 2.5 (sim)"
+vin = "4T1AB1CK7CU120128"
+protocol = "6"
+
+[adapter]
+profile = "genuine"
+
+[signals]
+rpm = { value = 760, jitter = 10 }
+speed = 0
+coolant = { ramp_from = 42, ramp_to = 58, seconds = 900 }
+load = { value = 20, jitter = 1 }
+stft1 = { value = 1.5, jitter = 1 }
+ltft1 = 2.0
+map = { value = 32, jitter = 1 }
+timing = 10
+iat = 18
+maf = { value = 2.4, jitter = 0.1 }
+throttle = 14
+o2_b1s1 = { wave = "sine", min = 0.1, max = 0.85, period = 1.3 }
+o2_b1s2 = { value = 0.66, jitter = 0.02 }
+runtime = { ramp_from = 900, ramp_to = 1800, seconds = 900 }
+fuel = 55
+warmups_since_clear = 40
+distance_since_clear = 1800
+baro = 101
+battery = { value = 14.1, jitter = 0.05 }
+ambient = 12
+
+[dtcs]
+stored = ["P0128"]
+permanent = ["P0128"]
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+o2_heater = "complete"
+
+[freeze_frame]
+dtc = "P0128"
+rpm = 740
+speed = 0
+coolant = 44
+load = 19
+ltft1 = 2.0
+iat = 16

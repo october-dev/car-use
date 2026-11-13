@@ -66,7 +66,8 @@ class CarState:
 
     def encode_pid(self, pid: int, frame: dict | None = None) -> bytes | None:
         if pid == 0x01:
-            return P.encode_monitor_status(bool(self.stored), len(self.stored), self.monitors)
+            return P.encode_monitor_status(bool(self.stored), len(self.stored), self.monitors,
+                                           compression=self.s.compression)
         if pid in (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0):
             avail = self.available_pids()
             bits = 0
