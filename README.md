@@ -72,8 +72,8 @@ car-use config set device "serial:///dev/cu.usbserial-XXXX?baud=38400"   # USB a
 car-use doctor                   # is everything connected? tells you the one fix if not
 car-use dongle-doctor            # what adapter did you actually buy? graded A to D
 car-use dongle-doctor --report   # anonymised JSON to share (WMI and model year, not the full VIN).
-                               # Takes ten minutes with the ignition on and prints its JSON at the end;
-                               # --soak-seconds 30 takes a quick sample instead
+                                 # Takes ten minutes with the ignition on and prints its JSON at the end;
+                                 # --soak-seconds 30 takes a quick sample instead
 ```
 
 Longer notes for Wi-Fi, USB, Windows and Bluetooth, plus which adapters are worth buying: [setup/](setup/).

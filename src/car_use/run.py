@@ -166,6 +166,10 @@ def _cmd_dongle_report(args) -> int:
             v._emulator.stop()
     text = json.dumps(rep, indent=2)
     print(text)
+    if (rep["soak"] or {}).get("interrupted"):
+        print("dongle-doctor --report: the link dropped or timed out during the soak. "
+              "This partial report has no PID count or DTC modes; "
+              "keep the interrupted marker when sharing it.", file=sys.stderr)
     if args.out:
         try:
             Path(args.out).write_text(text + "\n", encoding="utf-8")

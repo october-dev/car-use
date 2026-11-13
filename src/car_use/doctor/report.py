@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from .. import __version__
 from ..obd.elm import Elm327, ElmError
 from ..obd import vin as vinmod
 from ..transport.base import TransportError
@@ -33,10 +34,15 @@ def share_report(elm: Elm327, vehicle=None, soak_requests: int = 30,
                       notice=notice)
     vin_step = full["steps"].get("multiframe_vin") or {}
     decoded = vinmod.decode(vin_step["vin"]) if vin_step.get("vin") else {}
-    pid_count = _pid_count(vehicle) if full["steps"].get("link", {}).get("ok") else None
+    # A failed soak can leave the link dead or replies out of step.
+    # Do not publish subsequent probes as capability measurements.
+    interrupted = bool((full["steps"].get("soak") or {}).get("interrupted"))
+    link_ok = bool(full["steps"].get("link", {}).get("ok")) and not interrupted
+    pid_count = _pid_count(vehicle) if link_ok else None
     report = {
         "schema": 1,
         "source": "car-use dongle-doctor --report",
+        "car_use_version": __version__,
         "simulated": vehicle is not None and vehicle.scenario is not None,
         "kind": full["kind"],
         "grade": full["grade"],
@@ -60,7 +66,7 @@ def share_report(elm: Elm327, vehicle=None, soak_requests: int = 30,
             "protocol_number": (full["steps"].get("protocol") or {}).get("number"),
             "supported_pid_count": pid_count,
             "vin_multiframe_ok": bool(vin_step.get("valid_format")),
-            "dtc_modes": _dtc_modes(elm),
+            "dtc_modes": None if interrupted else _dtc_modes(elm),
         },
         "soak": full["steps"].get("soak"),
         "ignition_off_current_ma": current_ma,
