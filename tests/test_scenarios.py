@@ -50,7 +50,7 @@ def test_dpf_regen_is_a_warm_diesel_burning_extra_fuel(sim):
     assert v.dtcs()["stored"] == []
     assert v.readiness()["ignition"] == "compression"
     assert v.read("rpm").value > 900
-    assert v.read("fuel_rate").value > 2.5
+    assert v.read("fuel_rate").value > 1.5   # a warm diesel idles at roughly 0.6-1 L/h
     assert v.read("coolant").value > 80
     frames = v.raw_obd("22F1D0")
     assert frames[0].replace(" ", "") == "62F1D02D"

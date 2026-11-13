@@ -8,7 +8,7 @@ Do not invent one."""
 
 [car]
 name = "Illustrative electric car (sim, generic profile)"
-vin = "ILLUSTRATIVE-EV00"
+vin = "1CU0EVA00S0000001"
 protocol = "6"
 
 [adapter]

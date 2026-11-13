@@ -1,6 +1,6 @@
 notes = """Diesel particulate filter regeneration in progress, not a breakdown.
 Consistent with regen on generic OBD: compression-ignition bit set, idle held
-near 1000 rpm, and fuel rate several times a normal petrol idle, while coolant
+near 1000 rpm, and fuel rate about twice a normal diesel idle, while coolant
 is already warm and there is no stored code. (Standard Mode 01 defines DPF
 pressure, temperature and status PIDs such as 017A/017C/018B; this profile
 does not answer them.) DID F1D0 in this scenario is simulator-only (not a
@@ -22,7 +22,7 @@ coolant = { value = 88, jitter = 0.5 }
 load = { value = 35, jitter = 2 }
 runtime = 420
 fuel = 60
-fuel_rate = 3.4
+fuel_rate = 2.2
 oil_temp = 96
 baro = 100
 battery = { value = 14.0, jitter = 0.05 }

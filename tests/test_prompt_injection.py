@@ -185,3 +185,17 @@ def test_production_confirmation_refuses_without_a_terminal():
     assert not any(e["kind"] in ("allow", "effect") for e in entries)
     ok, msg = Audit().verify()
     assert ok, msg
+
+
+def test_owner_confirmation_never_comes_from_stdin(monkeypatch):
+    """The agent controls stdin. With no terminal, a 'yes' on stdin is not consent."""
+    import builtins, io, sys
+    from car_use.kernel import policy
+    real_open = builtins.open
+    def no_tty(path, *a, **k):
+        if str(path) == "/dev/tty":
+            raise OSError("no controlling terminal")
+        return real_open(path, *a, **k)
+    monkeypatch.setattr(builtins, "open", no_tty)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("yes\n"))
+    assert policy.ask_human("Clear codes?", "yes") is False

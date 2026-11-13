@@ -1,4 +1,5 @@
-notes = """2025 Honda Activa, OBD Stage II-B. This simplified teaching profile
+notes = """2025 Honda Activa, OBD Stage II-B. The engine is air-cooled, so `coolant` here
+is the engine temperature sensor, not a coolant reading. This simplified teaching profile
 answers rpm, speed, coolant, throttle, runtime and the 12 V supply, plus the
 continuous monitors. It does not answer oxygen sensors, fuel trims, MAF or
 the catalyst/evap/o2 monitors. That small map is this profile's scope, not a
@@ -15,7 +16,7 @@ protocol = "6"
 profile = "clone"
 
 [signals]
-rpm = { value = 1400, jitter = 30 }
+rpm = { value = 1700, jitter = 40 }
 speed = 0
 coolant = { value = 78, jitter = 0.5 }
 throttle = 5
