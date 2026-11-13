@@ -27,7 +27,8 @@ _RESET_AFTER = {"ATCRA7E8": "ATAR", "ATCF7E8": "ATCF000", "ATCM7FF": "ATCM000",
                 "ATCV1250": "ATCV0000", "ATCSM1": "ATCSM0"}
 
 
-def run(elm: Elm327, vehicle=None, soak_requests: int = 30) -> dict:
+def run(elm: Elm327, vehicle=None, soak_requests: int = 30,
+        soak_seconds: float | None = None, notice=None) -> dict:
     rep: dict = {"ts": time.time(), "steps": {}}
     s = rep["steps"]
 
@@ -90,19 +91,17 @@ def run(elm: Elm327, vehicle=None, soak_requests: int = 30) -> dict:
         except (ElmError, TransportError) as e:
             s["multiframe_vin"] = {"error": str(e)}
 
-        lat = []
-        errors = 0
-        for _ in range(soak_requests):
-            t = time.monotonic()
-            try:
-                elm.query_one("010C")
-                lat.append(time.monotonic() - t)
-            except (ElmError, TransportError):
-                errors += 1
+        if notice is not None:
+            notice()
+        soak = _collect_soak(elm, soak_requests, soak_seconds)
+        s["soak"] = {k: soak[k] for k in
+                     ("requests", "errors", "error_rate", "seconds", "target_seconds",
+                      "interrupted")}
+        lat = soak["lat"]
         if lat:
             s["throughput"] = {"single_pid_per_s": round(1 / statistics.mean(lat), 1),
                                "p95_ms": round(sorted(lat)[int(len(lat) * 0.95) - 1] * 1000, 1),
-                               "errors": errors, "requests": soak_requests}
+                               "errors": soak["errors"], "requests": soak["requests"]}
         try:
             t = time.monotonic()
             r = elm.query_one("010C0D05")
@@ -114,6 +113,44 @@ def run(elm: Elm327, vehicle=None, soak_requests: int = 30) -> dict:
     rep["grade"], rep["why"] = _grade(rep)
     rep["safety"] = ("read-only" if rep["kind"] == "clone" else "read-only (default)")
     return rep
+
+
+def _collect_soak(elm: Elm327, request_count: int, seconds: float | None) -> dict:
+    """Request-count soak, or a timed soak when ``seconds`` is greater than zero.
+
+    A timed soak is how a field report gets an error rate (the CLI asks for
+    ten minutes). Tests pass ``seconds=None`` so they stay on a short count.
+    """
+    lat: list[float] = []
+    errors = 0
+    n = 0
+    interrupted = False
+    t0 = time.monotonic()
+    timed = seconds is not None and seconds > 0
+    deadline = t0 + seconds if timed else None
+    while True:
+        if deadline is not None and n > 0 and time.monotonic() >= deadline:
+            break
+        if not timed and n >= request_count:
+            break
+        n += 1
+        t = time.monotonic()
+        try:
+            elm.query_one("010C")
+            lat.append(time.monotonic() - t)
+        except TransportError:
+            # The link is gone. Stop at once: a dead socket fails instantly
+            # and would otherwise spin as "errors" until the deadline.
+            interrupted = True
+            break
+        except ElmError:
+            errors += 1
+    elapsed = time.monotonic() - t0
+    return {"lat": lat, "requests": n, "errors": errors,
+            "error_rate": round(errors / n, 4) if n else None,
+            "seconds": round(elapsed, 2),
+            "target_seconds": seconds if timed else None,
+            "interrupted": interrupted}
 
 
 def _probe_monitor(elm: Elm327) -> bool:

@@ -54,7 +54,10 @@ class TcpTransport(Transport):
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     def write(self, data: bytes) -> None:
-        self.sock.sendall(data)
+        try:
+            self.sock.sendall(data)
+        except OSError as e:
+            raise TransportError(f"Adapter connection lost on {self.url}: {e}") from e
 
     def _read_some(self, timeout: float) -> bytes:
         self.sock.settimeout(timeout)
@@ -89,12 +92,18 @@ class SerialTransport(Transport):
             raise TransportError(f"Cannot open {path}: {e}") from e
 
     def write(self, data: bytes) -> None:
-        self.ser.write(data)
-        self.ser.flush()
+        try:
+            self.ser.write(data)
+            self.ser.flush()
+        except OSError as e:
+            raise TransportError(f"Adapter connection lost on {self.url}: {e}") from e
 
     def _read_some(self, timeout: float) -> bytes:
         self.ser.timeout = timeout
-        return self.ser.read(self.ser.in_waiting or 1)
+        try:
+            return self.ser.read(self.ser.in_waiting or 1)
+        except OSError as e:
+            raise TransportError(f"Adapter connection lost on {self.url}: {e}") from e
 
     def close(self) -> None:
         self.ser.close()

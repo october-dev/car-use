@@ -18,7 +18,7 @@ USAGE = """Usage:
 Commands:
   car-use skill                    print the agent skill (SKILL.md)
   car-use doctor [--sim S]         check setup and the connection to the car
-  car-use dongle-doctor            characterise the adapter and grade it A-D
+  car-use dongle-doctor [--report] characterise the adapter; --report is anonymised JSON
   car-use scenarios                list simulator scenarios
   car-use sim [SCENARIO] [--port 35000]   serve a virtual car on TCP (foreground)
   car-use config set device URL    tcp://192.168.0.10:35000 | serial:///dev/cu.X?baud=38400 | sim:p0420
@@ -114,8 +114,66 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_dongle_doctor(args) -> int:
+    if getattr(args, "report", False):
+        return _cmd_dongle_report(args)
+    if args.out is not None or args.soak_seconds is not None or args.current_ma is not None:
+        print("dongle-doctor: --out, --soak-seconds and --current-ma need --report.",
+              file=sys.stderr)
+        return 2
     code = "rep = dongle_doctor()\nprint(json.dumps(rep, indent=2))\n"
     return run_script(code, _device(args))
+
+
+def _cmd_dongle_report(args) -> int:
+    import math
+    from .connect import open_vehicle, NoDevice
+    from .doctor.report import PrivacyError, field_soak_seconds, share_report
+    from .transport.base import TransportError
+    from .obd.elm import ElmError
+    for value, name, unit in ((args.soak_seconds, "--soak-seconds", "seconds"),
+                              (args.current_ma, "--current-ma", "milliamps")):
+        if value is not None and (not math.isfinite(value) or value < 0):
+            print(f"dongle-doctor: {name} must be zero or more {unit}.", file=sys.stderr)
+            return 2
+    try:
+        v = open_vehicle(_device(args))
+    except NoDevice as e:
+        print(f"no device: {e}", file=sys.stderr)
+        return 1
+    except (TransportError, ElmError, OSError) as e:
+        print(f"cannot connect: {e}", file=sys.stderr)
+        return 1
+    soak_seconds = field_soak_seconds(args.soak_seconds)
+    if soak_seconds > 0:
+        notice_line = (f"dongle-doctor --report soaks for {soak_seconds:g} seconds. "
+                       "Keep the ignition on; the report JSON prints at the end.")
+    else:
+        notice_line = ("dongle-doctor --report: short check, no timed soak. "
+                       "Keep the ignition on; the report JSON prints at the end.")
+    try:
+        try:
+            rep = share_report(v.elm, v, soak_seconds=soak_seconds,
+                               current_ma=args.current_ma,
+                               notice=lambda: print(notice_line, file=sys.stderr))
+        except PrivacyError as e:
+            print(f"report refused: {e}", file=sys.stderr)
+            return 1
+        except (TransportError, ElmError, OSError) as e:
+            print(f"cannot report: {e}", file=sys.stderr)
+            return 1
+    finally:
+        v.elm.close()
+        if getattr(v, "_emulator", None):
+            v._emulator.stop()
+    text = json.dumps(rep, indent=2)
+    print(text)
+    if args.out:
+        try:
+            Path(args.out).write_text(text + "\n", encoding="utf-8")
+        except OSError as e:
+            print(f"could not save: {e}", file=sys.stderr)
+            return 1
+    return 0
 
 
 def cmd_sim(args) -> int:
@@ -288,10 +346,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--help", "-h", action="store_true")
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("skill")
-    for name in ("doctor", "dongle-doctor"):
-        sp = sub.add_parser(name)
-        sp.add_argument("--sim", default=argparse.SUPPRESS)
-        sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp = sub.add_parser("doctor")
+    sp.add_argument("--sim", default=argparse.SUPPRESS)
+    sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp = sub.add_parser("dongle-doctor")
+    sp.add_argument("--sim", default=argparse.SUPPRESS)
+    sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--report", action="store_true",
+                    help="print an anonymised JSON report (WMI and model year only)")
+    sp.add_argument("--out", help="also write the report JSON to this path")
+    sp.add_argument("--soak-seconds", type=float, default=None,
+                    help="soak length in seconds; --report defaults to 600, 0 is a short check")
+    sp.add_argument("--current-ma", type=float, default=None,
+                    help="ignition-off current from a meter; car-use does not measure it")
     sub.add_parser("scenarios")
     sp = sub.add_parser("sim")
     sp.add_argument("scenario", nargs="?", default="healthy")
