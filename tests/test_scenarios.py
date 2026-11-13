@@ -19,6 +19,12 @@ def test_new_scenarios_are_listed_and_explained():
         assert load(name).notes.strip()
 
 
+def test_bundled_scenarios_have_well_formed_vins():
+    from car_use.obd.vin import decode as vin_decode
+    for name in available():
+        assert vin_decode(load(name).vin)["valid_format"], name
+
+
 def test_p0128_coolant_stays_low_after_a_long_idle(sim):
     s = load("p0128")
     assert s.value("runtime", 0) >= 900

@@ -7,8 +7,8 @@ generic OBD — so a missing engine PID here is 'no data', not an engine fault.
 Do not invent one."""
 
 [car]
-name = "Illustrative electric car (sim, generic profile)"
-vin = "ILLUSTRATIVE-EV00"
+name = "Illustrative electric car, generic profile (sim)"
+vin = "1CARUSE04N0EV0001"
 protocol = "6"
 
 [adapter]
