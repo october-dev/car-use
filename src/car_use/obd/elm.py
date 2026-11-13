@@ -52,9 +52,19 @@ def _reassemble_legacy(payloads: list[bytes]) -> list[bytes]:
 
 
 class ElmError(RuntimeError):
-    def __init__(self, command: str, code: str):
+    def __init__(self, command: str, code: str, detail: str | None = None):
         self.command, self.code = command, code
-        super().__init__(f"{command}: {code} ({ERRORS.get(code, 'unexpected reply')})")
+        super().__init__(f"{command}: {code} ({detail or ERRORS.get(code, 'unexpected reply')})")
+
+
+_HEADER_11 = re.compile(r"^[0-9A-Fa-f]{3}$")
+
+
+def validate_header(value: str) -> str:
+    """An 11-bit CAN request header: three hex digits, at most 0x7FF."""
+    if not isinstance(value, str) or not _HEADER_11.match(value) or int(value, 16) > 0x7FF:
+        raise ValueError(f"request header must be three hex digits up to 7FF, got {value!r}")
+    return value.upper()
 
 
 @dataclass
@@ -80,10 +90,15 @@ class Elm327:
         self.lock = threading.Lock()
         self.info = AdapterInfo()
         self.log: list[tuple[float, str, str]] = []   # (seconds, cmd, reply) for tracing
+        self._target_broken = False
 
     # -- raw I/O ----------------------------------------------------------------
     def command(self, cmd: str, timeout: float | None = None) -> list[str]:
         """Send one command, return non-empty reply lines (echo and noise removed)."""
+        if self._target_broken:
+            raise ElmError(cmd, "NOT RESTORED",
+                           "adapter addressing unknown after a failed restore; "
+                           "call initialize() first")
         with self.lock:
             start = time.monotonic()
             self.t.write(cmd.encode("ascii") + b"\r")
@@ -115,6 +130,7 @@ class Elm327:
 
     # -- setup ------------------------------------------------------------------
     def initialize(self, protocol: str = "0") -> AdapterInfo:
+        self._target_broken = False
         self.t.drain()
         self.t.write(b"\r")           # flush any half-typed command
         try:
@@ -208,6 +224,34 @@ class Elm327:
         if not payloads:
             raise ElmError(req, lines[-1] if lines else "NO DATA")
         return payloads
+
+    def query_targeted(self, header: str, request: str) -> list[bytes]:
+        """Send one request to a physical 11-bit CAN header, then restore 7DF.
+
+        Only CAN protocols 6 and 8 for now: other protocols use different
+        header formats (documented in packs/README.md). The target and the
+        restore must both be acknowledged; a failed restore fails the
+        connection until initialize() runs again. ``header`` is the request
+        header (e.g. 7E0); the replying ECU's response ID (e.g. 7E8) is a
+        different number.
+        """
+        target = validate_header(header)
+        number = self.info.protocol_number.lstrip("A")
+        if number not in ("6", "8"):
+            raise ElmError(request, "NOT SUPPORTED",
+                           f"physical addressing needs CAN protocol 6 or 8 "
+                           f"(adapter reports {number or 'none'})")
+        if not self.at_ok("ATSH" + target):
+            raise ElmError(request, "NOT TARGETED",
+                           f"adapter refused ATSH{target}")
+        try:
+            return self.query(request)
+        finally:
+            if not self.at_ok("ATSH7DF"):
+                self._target_broken = True
+                raise ElmError(request, "NOT RESTORED",
+                               "adapter did not restore ATSH7DF; call initialize() "
+                               "before further diagnostics")
 
     def query_one(self, request: str) -> bytes:
         """First payload whose service byte is the positive response (+0x40)."""

@@ -1,0 +1,7 @@
+{
+  "request": "22F190",
+  "response": "62 F1 90 01 2C",
+  "formula": "A * 256 + B",
+  "value": 300,
+  "note": "Synthetic recording for loader tests only. F190 is the standard VIN identifier; not measured on a car."
+}

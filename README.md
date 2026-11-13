@@ -207,7 +207,7 @@ Built in the open. See the [Roadmap](https://github.com/october-dev/car-use/issu
 The most useful things right now:
 - `dongle-doctor --report` output from adapters you own, via the [Adapter report](https://github.com/october-dev/car-use/issues/new?template=adapter-report.yml) form (see [adapter compatibility](docs/compatibility.md));
 - virtual cars for problems you've fixed;
-- maker-specific data for your car.
+- maker-specific data for your car ([vehicle packs](packs/README.md)).
 
 ```bash
 git clone https://github.com/october-dev/car-use && cd car-use

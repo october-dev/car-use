@@ -99,7 +99,14 @@ def watch(names: list[str] | str, seconds: float = 10.0, hz: float = 5.0) -> Ser
     if isinstance(names, str):
         names = [names]
     v = car()
-    units = {n: _pids.resolve(n)[2].unit for n in names}
+    known: dict[str, str] = {}
+    for s in v.signals():
+        known.setdefault(s["alias"], s["unit"])
+        if s.get("path"):
+            known.setdefault(s["path"], s["unit"])
+        if s.get("pack"):
+            known.setdefault("pack:" + s["alias"], s["unit"])
+    units = {n: known[n] if n in known else _pids.resolve(n)[2].unit for n in names}
     rows, t0 = [], time.monotonic()
     period = 1.0 / hz if hz > 0 else 0
     while (now := time.monotonic()) - t0 < seconds:
