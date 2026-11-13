@@ -28,10 +28,29 @@ _MONITOR_NAMES = {
 }
 
 
+def _try(read):
+    """One section's read. An unsupported mode (older cars answer some with '?')
+    must not cost the whole scan."""
+    try:
+        return read(), None
+    except ElmError as e:
+        return {}, str(e) or type(e).__name__
+
+
 def build(vehicle, expect_vin: str | None = None) -> dict:
-    codes = vehicle.dtcs()
-    ready = vehicle.readiness()
     items: list[dict] = []
+    codes, codes_err = _try(vehicle.dtcs)
+    ready, ready_err = _try(vehicle.readiness)
+    if codes_err and ready_err:
+        raise ElmError("scan", codes_err)    # the car isn't answering at all: no report
+    if codes_err:
+        items.append(_item("amber", "Trouble codes were not reported",
+                           f"The car did not answer the code request ({codes_err}). "
+                           "Try again with the engine running, or use another scanner."))
+    if ready_err:
+        items.append(_item("amber", "Readiness monitors were not reported",
+                           f"The car did not answer the monitor request ({ready_err}), "
+                           "so a recent code clear can't be ruled out."))
 
     stored = list(codes.get("stored") or [])
     pending = list(codes.get("pending") or [])
@@ -40,7 +59,9 @@ def build(vehicle, expect_vin: str | None = None) -> dict:
     # The light is sampled twice (once inside dtcs(), once here); an observed
     # "on" from either sample is kept.
     mil_on = bool(codes.get("mil_on") or ready.get("mil_on"))
-    if mil_on or stored:
+    if codes_err and not mil_on:
+        pass
+    elif mil_on or stored:
         detail = "Stored: " + (_describe_codes(stored, descriptions) or "none") + ". "
         detail += ("The check-engine light is commanded on." if mil_on
                    else "The check-engine light is not commanded on.")
@@ -62,10 +83,13 @@ def build(vehicle, expect_vin: str | None = None) -> dict:
     # Stored codes together with permanent ones are already red above.
 
     incomplete = list(ready.get("incomplete") or [])
+    if ready_err:
+        incomplete, recent = [], False
     distance = ready.get("distance_since_clear")
     warmups = ready.get("warmups_since_clear")
-    recent = ((distance is not None and distance < RECENT_CLEAR_KM)
-              or (warmups is not None and warmups < RECENT_CLEAR_WARMUPS))
+    recent = (not ready_err) and (
+        (distance is not None and distance < RECENT_CLEAR_KM)
+        or (warmups is not None and warmups < RECENT_CLEAR_WARMUPS))
     names = ", ".join(_MONITOR_NAMES.get(m, m.replace("_", " ")) for m in incomplete)
     if incomplete and recent:
         items.append(_item(
@@ -78,19 +102,21 @@ def build(vehicle, expect_vin: str | None = None) -> dict:
         items.append(_item("amber", "Some monitors are not complete",
                            names + ". Not enough on its own to call the codes cleared, "
                            "but an inspection may still refuse the car."))
-    else:
+    elif not ready_err:
         items.append(_item("green", "Readiness monitors are complete",
                            f"Distance since codes were cleared: {_km(distance)}. "
                            f"Warm-ups since clear: {_num(warmups)}."))
 
     items.append(_vin_item(vehicle, expect_vin))
     items.append(_charging(vehicle))
-    items.append(_item(
-        "amber", "Odometer was not compared across modules",
-        "car-use does not yet compare odometer readings across modules."))
+    note = _item("amber", "Odometer was not compared across modules",
+                 "car-use does not yet compare odometer readings across modules. "
+                 "Check the service history yourself.")
+    note["note"] = True     # shown, but a known gap in car-use is not a fault in the car
+    items.append(note)
 
     rank = {"red": 2, "amber": 1, "green": 0}
-    worst = max(items, key=lambda item: rank[item["level"]])["level"]
+    worst = max((i for i in items if not i.get("note")), key=lambda item: rank[item["level"]])["level"]
     headlines = {
         "red": "Do not treat this car as clean on this scan.",
         "amber": "No red flag in this scan, but something needs attention.",

@@ -83,7 +83,7 @@ car-use inspect --sim cleared-codes --html scan.html         # try it on a virtu
 car-use inspect --md scan.md                                 # save the markdown too
 ```
 
-This is an OBD scan, not a mechanical inspection: codes, self-checks, identity and charging voltage. It does not compare odometer readings across modules yet.
+This is an OBD scan, not a mechanical inspection: codes, self-checks, identity and charging voltage. It does not compare odometer readings across modules yet. The report includes the full VIN, so don't post it publicly.
 
 ## No car? Use a virtual one.
 

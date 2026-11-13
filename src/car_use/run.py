@@ -159,15 +159,15 @@ def cmd_inspect(args) -> int:
     try:
         v = open_vehicle(_device(args))
     except NoDevice as e:
-        print(f"no device: {e}")
+        print(f"no device: {e}", file=sys.stderr)
         return 1
     except (TransportError, ElmError, OSError) as e:
-        print(f"cannot connect: {e}")
+        print(f"cannot connect: {e}", file=sys.stderr)
         return 1
     try:
         report = build(v, expect_vin=args.expect_vin)
     except (TransportError, ElmError, OSError) as e:
-        print(f"cannot scan: {e}")
+        print(f"cannot scan: {e}", file=sys.stderr)
         return 1
     finally:
         v.elm.close()

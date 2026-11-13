@@ -33,7 +33,7 @@ def _stub_vehicle(*, vin=HEALTHY_VIN, stored=(), pending=(), permanent=(),
                   descriptions=None, codes_mil=False, ready_mil=False,
                   incomplete=(), distance=500, warmups=40,
                   battery=14.1, rpm=750, fail=None):
-    """A vehicle-shaped object. fail=exception makes dtcs() raise it."""
+    """A vehicle-shaped object. fail=exception makes dtcs() and readiness() raise it."""
     v = types.SimpleNamespace()
     v.vin = vin
     v.scenario = None
@@ -52,7 +52,12 @@ def _stub_vehicle(*, vin=HEALTHY_VIN, stored=(), pending=(), permanent=(),
         def dtcs():
             return dict(codes)
     v.dtcs = dtcs
-    v.readiness = lambda: dict(ready)
+    if fail is not None:
+        def readiness():
+            raise fail
+        v.readiness = readiness      # a car that fails, fails every request
+    else:
+        v.readiness = lambda: dict(ready)
     v.read = lambda name: _Reading({"battery": battery, "rpm": rpm}[name])
     return v
 
@@ -151,8 +156,8 @@ def test_scan_failure_returns_useful_text_and_closes(monkeypatch, capsys, exc):
     args = argparse.Namespace(sim="whatever", device=None, expect_vin=None,
                               html=None, md=None)
     assert runmod.cmd_inspect(args) == 1
-    out = capsys.readouterr().out
-    assert "cannot scan" in out and "Traceback" not in out
+    cap = capsys.readouterr()
+    assert "cannot scan" in cap.err and "Traceback" not in cap.out + cap.err
     assert v.elm.closed
 
 
@@ -161,7 +166,7 @@ def test_ignition_off_scan_fails_cleanly():
                 ["inspect", "--sim", "ignition-off"]):
         proc = _inspect(*argv)
         assert proc.returncode == 1, argv
-        assert "ignition" in proc.stdout.lower(), argv
+        assert "ignition" in proc.stderr.lower(), argv
         assert "Traceback" not in proc.stdout + proc.stderr, argv
 
 
@@ -285,3 +290,15 @@ def test_parent_sim_flag_survives_for_doctor():
     proc = _inspect("--sim", "healthy", "doctor")
     assert proc.returncode == 0, proc.stderr
     assert "Honda Civic" in proc.stdout
+
+
+def test_one_unsupported_section_does_not_cost_the_scan():
+    from car_use.inspection_report import build
+    v = _stub_vehicle()
+    def no_mode(*a, **k):
+        raise ElmError("0101", "?")
+    v.readiness = no_mode
+    rep = build(v)
+    titles = [i["title"] for i in rep["items"]]
+    assert "Readiness monitors were not reported" in titles
+    assert "Readiness monitors are complete" not in titles
