@@ -37,10 +37,10 @@ The person plugs things in and turns keys. You never ask them to do anything whi
 - `car()`: the connected vehicle. `car().describe()` gives VIN, adapter, protocol and whether it's simulated.
 - `manifest()`: what this car + backend can observe and do, with altitude (A0 observe ... A4 service) and tier.
 - `signals(prefix="")`: live signals this car supports: alias, VSS path, unit, PID.
-- `read(name)`: one signal by alias (`"rpm"`), VSS path (`"Vehicle.Speed"`) or PID (`"010C"`). Returns a reading with value, unit, ts and source.
+- `read(name)`: one signal by alias (`"rpm"`), VSS path (`"Vehicle.Speed"`) or PID (`"010C"`). Returns a reading with value, unit, ts and source. This is the engine ECU. `read(name, ecu="7E9")` asks one other ECU by the CAN id it answers as.
 - `read_many([names])`: several signals, batched into as few requests as the adapter allows.
 - `watch(names, seconds=10, hz=5)`: sample over time. Returns a `Series`. `print()` it for min, max, mean, stdev and switches/10s per signal. Use `.rows` and `.column(name)` for raw data.
-- `dtcs()`: `{stored, pending, permanent, descriptions, mil_on}`.
+- `dtcs()`: `{stored, pending, permanent, descriptions, mil_on, by_ecu}`. `by_ecu` maps a CAN id (`7E8` engine, `7E9` transmission) to the codes that ECU holds. `stored` is still the combined list.
   - Stored = confirmed (MIL on).
   - Pending = seen once, not confirmed.
   - Permanent = cannot be cleared by a scan tool, only by the car re-running the monitor.
@@ -48,7 +48,7 @@ The person plugs things in and turns keys. You never ask them to do anything whi
 - `ready_for_inspection()`: likely to pass a US OBD inspection? Needs the check-engine light off, no confirmed codes, and incomplete monitors within the federal allowance for the model year (2 for 1996-2000, 1 for 2001 and newer). Not a state certificate. If it is not ready, say `next` in plain words.
 - `freeze_frame()`: the conditions saved when the stored code set (rpm, speed, load, trims...).
 - `vin_info()`: offline decode: check digit, model year, manufacturer.
-- `raw_obd("0105")`: read-only raw request. Allowed services: 01, 02, 03, 06, 07, 09, 0A, 19, 22. Everything else is refused by the kernel.
+- `raw_obd("0105")`: read-only raw request. Allowed services: 01, 02, 03, 06, 07, 09, 0A, 19, 22. Everything else is refused by the kernel. `raw_obd("22F190", ecu="7E9")` sends ATSH so Mode 22 hits that ECU.
 - `clear_dtcs()`: tier T1D. See Consent.
 - `describe_dtc("P0420")`, `dongle_doctor()`, `scenarios()`.
 - `maker_info()`: what car-use knows about this car's maker (looked up from the VIN, or pass a make). Protocols, the dealer tool, known patterns. Facts are tagged `[verified]`, `[common]` or `[unverified]`. Treat `[unverified]` as a lead and say so if you use it. Also on the command line: `car-use maker toyota`.
@@ -107,5 +107,5 @@ This is a real car that belongs to a person.
 
 - OBD-II Mode 01/02/03/07/09/0A and Mode 22 reads through `raw_obd`. No BLE yet. No CAN sniffing yet.
 - KWP2000, ISO 9141-2 and J1850 cars (older Maruti, many pre-2008 cars) are read like CAN cars, but so far only against the simulator's `kwp2000` and `iso9141` virtual cars, not real ones. Connecting can take several seconds longer than on CAN.
-- Multi-ECU replies are merged. Maker packs are early: few makers, and no maker-specific data identifiers yet.
+- `dtcs()["by_ecu"]` separates codes by CAN id when the adapter can turn headers on (CAN cars). Maker packs are early: few makers, and no maker-specific data identifiers yet.
 - Aftermarket ECUs: `.ini` parsing and log reading only. Live connection to Speeduino/rusEFI over their own protocol is coming.

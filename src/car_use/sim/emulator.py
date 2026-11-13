@@ -106,6 +106,7 @@ class _Session:
         self.echo, self.linefeed, self.spaces, self.headers = True, True, True, False
         self.protocol = "0"
         self.kwp_inited = False
+        self.tx_header = "7DF"
 
     @property
     def identity(self) -> str:
@@ -161,6 +162,55 @@ class _Session:
             return [self._hex(payload)]
         return [self._hex(payload[i:i + 7]) for i in range(0, len(payload), 7)]
 
+    def _selected_ecu(self) -> str | None:
+        """Response id for a physical ATSH, or None for a functional request."""
+        header = self.tx_header.upper()
+        if header in ("", "7DF", "18DB33F1"):
+            return None
+        try:
+            if len(header) <= 3:
+                return f"{int(header, 16) + 8:03X}"
+        except ValueError:
+            return None
+        return header
+
+    def _addressed(self, req: bytes) -> list[tuple[str, bytes]]:
+        selected = self._selected_ecu()
+        items: list[tuple[str, str | None]] = [("7E8", None)]
+        for ecu in self.car.s.extra_ecus:
+            items.append((ecu.upper(), ecu))
+        if selected:
+            items = [item for item in items if item[0] == selected]
+        out = []
+        for ecu, key in items:
+            payload = self.obd(req) if key is None else self._extra_payload(req, key)
+            if payload is not None:
+                out.append((ecu, payload))
+        return out
+
+    def _extra_payload(self, req: bytes, ecu: str) -> bytes | None:
+        spec = self.car.s.extra_ecus.get(ecu.upper())
+        if not spec or not req:
+            return None
+        mode = req[0]
+        if mode in (0x03, 0x07, 0x0A):
+            which = {0x03: "stored", 0x07: "pending", 0x0A: "permanent"}[mode]
+            codes = spec.get(which) or []
+            body = b"".join(P.encode_dtc(c) for c in codes)
+            return bytes([mode + 0x40, len(codes)]) + body
+        if mode == 0x01 and len(req) >= 2:
+            pid = req[1]
+            encoded = _encode_extra_pid(spec, pid)
+            if encoded is None:
+                return None
+            return bytes([0x41, pid]) + encoded
+        if mode == 0x22 and len(req) >= 3:
+            did = f"{req[1]:02X}{req[2]:02X}"
+            if did not in spec.get("dids", {}):
+                return None
+            return bytes([0x62, req[1], req[2]]) + bytes.fromhex(str(spec["dids"][did]).replace(" ", ""))
+        return None
+
     # -- dispatch ------------------------------------------------------------
     def handle(self, raw: str) -> list[str]:
         cmd = raw.strip().upper().replace(" ", "")
@@ -192,7 +242,19 @@ class _Session:
             self.kwp_inited = True
             time.sleep(0.15)
             out.append("BUS INIT: ...OK")
-        payload = self.obd(req)
+        if self.headers and not self._non_can():
+            pairs = self._addressed(req)
+            if not pairs:
+                return out + ["NO DATA"]
+            lines: list[str] = []
+            for ecu, payload in pairs:
+                lines += frames_with_id(ecu, payload)
+            return out + lines
+        target = self._selected_ecu()
+        if target not in (None, "7E8"):
+            payload = self._extra_payload(req, target)
+        else:
+            payload = self.obd(req)
         if payload is None:
             return out + ["NO DATA"]
         return out + self.frames(payload)
@@ -227,6 +289,9 @@ class _Session:
         if c.startswith("SP") or c.startswith("TP"):
             p = c[2:].lstrip("A") or "0"
             self.protocol = "0" if p == "0" else p
+            return ["OK"]
+        if c.startswith("SH"):
+            self.tx_header = c[2:].upper() or "7DF"
             return ["OK"]
         if c == "MA":
             return ["STOPPED"]
@@ -279,6 +344,42 @@ class _Session:
                 return bytes([0x62, req[1], req[2]]) + bytes.fromhex(car.s.dids[did].replace(" ", ""))
             return bytes([0x7F, 0x22, 0x31])
         return None
+
+
+def frames_with_id(ecu: str, payload: bytes) -> list[str]:
+    """ATH1, no spaces: 11- or 29-bit id, then ISO-TP PCI, then data.
+
+    A single frame is `id 0L data`. A longer payload is a first frame plus
+    consecutive frames, so two ECUs can share a response without merging.
+    """
+    ecu = ecu.upper()
+    if len(payload) <= 7:
+        return [ecu + f"{len(payload):02X}" + payload.hex().upper()]
+    length = len(payload)
+    first = payload[:6]
+    lines = [ecu + f"1{(length >> 8) & 0xF:X}{length & 0xFF:02X}" + first.hex().upper()]
+    rest, seq = payload[6:], 1
+    while rest:
+        chunk, rest = rest[:7], rest[7:]
+        lines.append(ecu + f"2{seq:X}" + chunk.hex().upper())
+        seq = (seq + 1) & 0xF
+    return lines
+
+
+def _encode_extra_pid(spec: dict, pid: int) -> bytes | None:
+    decoded = P.PIDS.get(pid)
+    if decoded is None:
+        return None
+    signals = spec.get("signals") or {}
+    if decoded.signals[0].alias not in signals:
+        return None
+    vals = []
+    for sig in decoded.signals:
+        raw = signals.get(sig.alias, 0)
+        if isinstance(raw, dict):
+            raw = raw.get("value", 0)
+        vals.append(float(raw))
+    return decoded.encode(tuple(vals))
 
 
 def _bitmap(pids: set[int]) -> bytes:

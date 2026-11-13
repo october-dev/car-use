@@ -51,6 +51,46 @@ def _reassemble_legacy(payloads: list[bytes]) -> list[bytes]:
     return payloads
 
 
+_11BIT_ECUS = {f"7E{d}" for d in "89ABCDEF"}
+
+
+def assemble_headers(lines: list[str]) -> dict[str, bytes]:
+    """ATH1 lines to one payload per sender. 11-bit ids are 3 hex digits, 29-bit are 8."""
+    pending: dict[str, dict] = {}
+    done: dict[str, bytes] = {}
+    for ln in lines:
+        s = ln.replace(" ", "").upper()
+        if not s or not _HEX.match(s):
+            continue
+        ident, rest = _split_can_id(s)
+        if ident is None or len(rest) < 2:
+            continue
+        pci = int(rest[:2], 16)
+        data = bytes.fromhex(rest[2:]) if rest[2:] else b""
+        kind = pci >> 4
+        if kind == 0:
+            done[ident] = data[:pci & 0x0F]
+            pending.pop(ident, None)
+        elif kind == 1 and data:
+            total = ((pci & 0x0F) << 8) | data[0]
+            pending[ident] = {"need": total, "buf": bytearray(data[1:]), "next": 1}
+        elif kind == 2 and ident in pending and (pci & 0x0F) == pending[ident]["next"]:
+            pending[ident]["buf"] += data
+            pending[ident]["next"] = (pending[ident]["next"] + 1) & 0xF
+            if len(pending[ident]["buf"]) >= pending[ident]["need"]:
+                done[ident] = bytes(pending[ident]["buf"][:pending[ident]["need"]])
+                pending.pop(ident, None)
+    return done
+
+
+def _split_can_id(line: str) -> tuple[str | None, str]:
+    if len(line) >= 5 and line[:3] in _11BIT_ECUS:
+        return line[:3], line[3:]
+    if len(line) >= 10 and line[:2] in {"18", "19"}:
+        return line[:8], line[8:]
+    return None, line
+
+
 class ElmError(RuntimeError):
     def __init__(self, command: str, code: str, detail: str | None = None):
         self.command, self.code = command, code
@@ -252,6 +292,34 @@ class Elm327:
                 raise ElmError(request, "NOT RESTORED",
                                "adapter did not restore ATSH7DF; call initialize() "
                                "before further diagnostics")
+
+    def query_by_ecu(self, request: str) -> dict[str, bytes]:
+        """ATH1 for this request, then one payload per CAN id. Restores ATH0.
+
+        CAN only: older protocols have no CAN ids, so this returns {} there
+        and callers fall back to the merged reply.
+        """
+        if not self.info.is_can:
+            return {}
+        self.at_ok("ATH1")
+        try:
+            lines = self.command(request)
+        finally:
+            self.at_ok("ATH0")
+        return assemble_headers(lines)
+
+    def query_ecu(self, response_id: str, request: str) -> list[bytes]:
+        """Ask the ECU that answers as `response_id` (e.g. 7E9) directly.
+
+        Goes through query_targeted, so the header change and the restore are
+        both checked. 11-bit ids only (7E8-7EF -> request 7E0-7E7); 29-bit
+        physical addressing is refused rather than guessed.
+        """
+        resp = response_id.replace(" ", "").upper()
+        if resp not in _11BIT_ECUS:
+            raise ElmError(request, "NOT SUPPORTED",
+                           f"per-ECU requests need an 11-bit CAN id 7E8-7EF (got {resp})")
+        return self.query_targeted(f"{int(resp, 16) - 8:03X}", request)
 
     def query_one(self, request: str) -> bytes:
         """First payload whose service byte is the positive response (+0x40)."""

@@ -40,9 +40,13 @@ def signals(prefix: str = "") -> list[dict]:
     return car().signals(prefix)
 
 
-def read(name: str):
-    """One signal by alias ('rpm'), VSS path ('Vehicle.Speed') or PID ('010C')."""
-    return car().read(name)
+def read(name: str, ecu: str | None = None):
+    """One signal by alias ('rpm'), VSS path ('Vehicle.Speed') or PID ('010C').
+
+    With no `ecu`, this is the engine (7E8). Pass the responding CAN id, such as
+    `ecu="7E9"`, to ask the transmission instead.
+    """
+    return car().read(name, ecu=ecu)
 
 
 def read_many(names: list[str]) -> dict:
@@ -149,9 +153,13 @@ def vin_info() -> dict:
     return car().vin_info()
 
 
-def raw_obd(request: str):
-    """Send a read-only OBD/UDS request in hex ('0105', '221E12'). Writes are refused."""
-    return car().raw_obd(request)
+def raw_obd(request: str, ecu: str | None = None):
+    """Send a read-only OBD/UDS request in hex ('0105', '221E12'). Writes are refused.
+
+    `ecu` is the responding CAN id. Mode 22 uses ATSH to address that ECU, then
+    restores the functional header.
+    """
+    return car().raw_obd(request, ecu=ecu)
 
 
 def clear_dtcs():
