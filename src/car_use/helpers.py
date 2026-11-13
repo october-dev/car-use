@@ -26,7 +26,7 @@ def _configure(device: str | None) -> None:
 def car():
     """The connected vehicle (connects on first use). car().describe() for a summary."""
     if _state["vehicle"] is None:
-        _state["vehicle"] = _connect.open_vehicle(_state["device"])
+        _state["vehicle"] = _connect.open_vehicle(_state["device"], kernel=_state.get("kernel"))
     return _state["vehicle"]
 
 

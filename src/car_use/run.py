@@ -29,6 +29,7 @@ Commands:
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log
   car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
+  car-use mcp [--sim S]           local MCP server on stdin/stdout
   car-use --version
 """
 
@@ -359,6 +360,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="soak length in seconds; --report defaults to 600, 0 is a short check")
     sp.add_argument("--current-ma", type=float, default=None,
                     help="ignition-off current from a meter; car-use does not measure it")
+    sp = sub.add_parser("mcp")
+    sp.add_argument("--sim", default=argparse.SUPPRESS)
+    sp.add_argument("--device", default=argparse.SUPPRESS)
     sub.add_parser("scenarios")
     sp = sub.add_parser("sim")
     sp.add_argument("scenario", nargs="?", default="healthy")
@@ -413,6 +417,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_doctor(args)
     if args.cmd == "dongle-doctor":
         return cmd_dongle_doctor(args)
+    if args.cmd == "mcp":
+        from .mcp_server import serve
+        return serve(_device(args))
     if args.cmd == "scenarios":
         from .sim.scenario import available, load
         for n in sorted(available()):
