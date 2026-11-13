@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from car_use import config
+from car_use import __version__, config
 from car_use.doctor.report import (
     PrivacyError, _dtc_modes, assert_shareable, field_soak_seconds, share_report,
 )
@@ -67,6 +67,7 @@ def test_share_report_keeps_wmi_and_drops_vin(sim):
     blob = json.dumps(rep)
     assert VIN not in blob
     assert rep["schema"] == 1
+    assert rep["car_use_version"] == __version__
     assert rep["simulated"] is True
     assert rep["vehicle"]["wmi"] == "4T1"
     assert rep["vehicle"]["model_year"] == 2014
@@ -159,7 +160,15 @@ def test_link_loss_mid_soak_gives_an_interrupted_report():
         "0902": (b"014\r0:49020134543142\r1:4631464B304555\r2:333030303432\r\r>"),
         "010C": [ok_010c, ok_010c, TransportError("link died")],
     }
-    rep = share_report(Elm327(_ScriptedTransport(script)), None, soak_seconds=600)
+
+    class UnprobedVehicle:
+        scenario = None
+
+        def supported_pids(self):
+            pytest.fail("PID probe ran after an interrupted soak")
+
+    t = _ScriptedTransport(script)
+    rep = share_report(Elm327(t), UnprobedVehicle(), soak_seconds=600)
     soak = rep["soak"]
     assert soak["interrupted"] is True
     assert soak["requests"] == 3
@@ -168,7 +177,22 @@ def test_link_loss_mid_soak_gives_an_interrupted_report():
     # Near-zero errors with the marker: without it this would look excellent.
     assert soak["errors"] == 0 and soak["error_rate"] == 0.0
     assert rep["simulated"] is False
+    assert rep["vehicle"]["dtc_modes"] is None
+    assert rep["vehicle"]["supported_pid_count"] is None
+    assert all(mode not in t.writes for mode in ("03", "07", "0A"))
     assert_shareable(rep)
+
+
+def test_cli_says_when_the_soak_was_interrupted(monkeypatch, capsys):
+    from car_use import run
+    from car_use.doctor import report
+    monkeypatch.setattr(report, "share_report",
+                        lambda *a, **k: {"soak": {"interrupted": True}})
+    assert run.main(["dongle-doctor", "--report", "--sim", "healthy",
+                     "--soak-seconds", "0"]) == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["soak"]["interrupted"] is True
+    assert "interrupted" in out.err
 
 
 def test_soak_notice_fires_only_when_a_soak_runs(sim):

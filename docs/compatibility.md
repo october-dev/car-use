@@ -14,6 +14,7 @@ No field reports are in this repository yet. A row is added only from an anonymi
 - vehicle WMI (the first three VIN characters) and model year
 - protocol, supported Mode 01 PID count, whether the multi-frame VIN read was well formed, and whether DTC modes 03, 07 and 0A answered (not the codes)
 - soak error rate over a ten-minute soak with the ignition on (the JSON prints at the end). Pass `--soak-seconds 30` for a quick sample or `--soak-seconds 0` for a short 30-request check.
+- `simulated` (true for the built-in simulator; those reports are not listed), the car-use version, and `soak.interrupted`. Interrupted means the link dropped or timed out during the soak: the PID count and DTC modes are then null. Such a field report is still useful; identify it as interrupted when sharing or summarising it. Check the connection and ignition before an optional retry.
 
 ## Ignition-off current
 

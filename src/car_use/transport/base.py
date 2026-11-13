@@ -99,8 +99,8 @@ class SerialTransport(Transport):
             raise TransportError(f"Adapter connection lost on {self.url}: {e}") from e
 
     def _read_some(self, timeout: float) -> bytes:
-        self.ser.timeout = timeout
         try:
+            self.ser.timeout = timeout
             return self.ser.read(self.ser.in_waiting or 1)
         except OSError as e:
             raise TransportError(f"Adapter connection lost on {self.url}: {e}") from e
