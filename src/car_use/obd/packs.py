@@ -1,10 +1,10 @@
 """Manufacturer Mode 22 packs.
 
-A pack is YAML: which VINs it matches, which ECU header to use, and a DID
+A pack is TOML: which VINs it matches, which ECU header to use, and a DID
 with a formula. Formulas are arithmetic on the response bytes (A, B, C…),
 not Python. A contributed pack cannot call functions.
 
-Shipped packs live in ``packs/*.yaml`` at the repo root (and inside the
+Shipped packs live in ``packs/*.toml`` at the repo root (and inside the
 wheel, if included). A user or an agent can also drop packs in
 ``~/.car-use/packs/``. Nothing in the default tree pretends to be a real
 Hyundai, Kia, Toyota or GM identifier: those need a recorded response.
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-import yaml
+import tomllib
 
 from .. import paths
 from . import pids as _pids
@@ -179,11 +179,11 @@ def load_packs(extra: list[Path] | None = None) -> list[Pack]:
     so one bad file cannot break ordinary diagnostics."""
     found: list[Pack] = []
     for directory in _pack_dirs(extra):
-        files = sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+        files = sorted(directory.glob("*.toml"))
         for path in files:
             try:
                 found.append(_load_file(path))
-            except (PackError, yaml.YAMLError, OSError, ValueError) as e:
+            except (PackError, OSError, ValueError) as e:
                 print(f"car-use: skipping invalid pack {path}: {e}", file=sys.stderr)
     return found
 
@@ -230,10 +230,13 @@ def _pack_dirs(extra: list[Path] | None) -> list[Path]:
 
 
 def _load_file(path: Path) -> Pack:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-
     def bad(field: str, problem: str) -> PackError:
         return PackError(f"{path}: {field}: {problem}")
+
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as e:
+        raise bad("pack", f"not valid TOML ({e})") from None
 
     if not isinstance(raw, dict):
         raise bad("pack", "must be a mapping")

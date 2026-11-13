@@ -17,27 +17,29 @@ from car_use.transport.base import Transport, TransportError
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 RECORDING = FIXTURES / "mode22" / "example.json"
-PACK = FIXTURES / "packs" / "example.yaml"
+PACK = FIXTURES / "packs" / "example.toml"
 PACK_DEMO = str(FIXTURES / "scenarios" / "pack-demo.toml")
 VIN = "4T1BF1FK0EU300042"
 
 GOOD_PACK = """\
-name: t
-match:
-  wmi: ["4T1"]
-  year_from: 2010
-  year_to: 2020
-dids:
-  - ecu: "7E0"
-    id: "F190"
-    name: pack_counter
-    formula: "A * 256 + B"
-    unit: count
-    vss: Vehicle.Demo.Counter
+name = "t"
+
+[match]
+wmi = ["4T1"]
+year_from = 2010
+year_to = 2020
+
+[[dids]]
+ecu = "7E0"
+id = "F190"
+name = "pack_counter"
+formula = "A * 256 + B"
+unit = "count"
+vss = "Vehicle.Demo.Counter"
 """
 
 
-def _load_text(tmp_path, text, name="t.yaml"):
+def _load_text(tmp_path, text, name="t.toml"):
     p = tmp_path / name
     p.write_text(text)
     return P._load_file(p)
@@ -51,7 +53,7 @@ def _swap(text, old, new):
 def _install_example(home):
     dest = home / "packs"
     dest.mkdir(parents=True, exist_ok=True)
-    shutil.copy(PACK, dest / "example.yaml")
+    shutil.copy(PACK, dest / "example.toml")
 
 
 class _ScriptedTransport(Transport):
@@ -85,7 +87,7 @@ class _ScriptedTransport(Transport):
         pass
 
 
-def test_recorded_response_decodes_with_the_yaml_formula():
+def test_recorded_response_decodes_with_the_pack_formula():
     recorded = json.loads(RECORDING.read_text())
     packs = load_packs(extra=[FIXTURES / "packs"])
     formula = next(d.formula for p in packs if p.name == "example-counter"
@@ -132,61 +134,61 @@ def test_decode_payload_checks_the_did_echo():
 def test_good_pack_loads_with_source_and_description(tmp_path):
     pack = _load_text(tmp_path, GOOD_PACK)
     assert pack.dids[0].ecu == "7E0"
-    assert pack.source.endswith("t.yaml")
+    assert pack.source.endswith("t.toml")
     for header in ("7DF", "7FF", "7e0"):
-        text = _swap(GOOD_PACK, 'ecu: "7E0"', f'ecu: "{header}"')
+        text = _swap(GOOD_PACK, 'ecu = "7E0"', f'ecu = "{header}"')
         assert _load_text(tmp_path, text).dids[0].ecu == header.upper()
 
 
 @pytest.mark.parametrize("old,new", [
-    ('  - ecu: "7E0"\n    ', '  - '),
-    ('ecu: "7E0"', 'ecu: "7E0\\r04"'),
-    ('ecu: "7E0"', 'ecu: "XYZ"'),
-    ('ecu: "7E0"', 'ecu: "7E"'),
-    ('ecu: "7E0"', 'ecu: "1234"'),
-    ('ecu: "7E0"', 'ecu: "FFF"'),
-    ('ecu: "7E0"', 'ecu: "800"'),
-    ('ecu: "7E0"', 'ecu: 123'),
-    ('id: "F190"', 'id: 0101'),
-    ('id: "F190"', 'id: 0x0400'),
-    ('id: "F190"', 'id: "XYZ1"'),
-    ('id: "F190"', 'id: "F19"'),
-    ('    id: "F190"\n', ''),
-    ('    name: pack_counter\n', ''),
-    ('name: pack_counter', 'name: speed'),
-    ('name: pack_counter', 'name: "010C"'),
-    ('name: pack_counter', 'name: "0c"'),
-    ('name: pack_counter', 'name: "pid:0c"'),
-    ('name: pack_counter', 'name: "a:b"'),
-    ('vss: Vehicle.Demo.Counter', 'vss: Vehicle.Speed'),
-    ('vss: Vehicle.Demo.Counter', 'vss: "a:b"'),
-    ('formula: "A * 256 + B"', 'formula: "A + "'),
-    ('formula: "A * 256 + B"', 'formula: ""'),
-    ('formula: "A * 256 + B"', 'formula: 42'),
+    ('ecu = "7E0"\n', ''),
+    ('ecu = "7E0"', 'ecu = "7E0\\r04"'),
+    ('ecu = "7E0"', 'ecu = "XYZ"'),
+    ('ecu = "7E0"', 'ecu = "7E"'),
+    ('ecu = "7E0"', 'ecu = "1234"'),
+    ('ecu = "7E0"', 'ecu = "FFF"'),
+    ('ecu = "7E0"', 'ecu = "800"'),
+    ('ecu = "7E0"', 'ecu = 123'),
+    ('id = "F190"', 'id = 101'),
+    ('id = "F190"', 'id = 0x0400'),
+    ('id = "F190"', 'id = "XYZ1"'),
+    ('id = "F190"', 'id = "F19"'),
+    ('id = "F190"\n', ''),
+    ('name = "pack_counter"\n', ''),
+    ('name = "pack_counter"', 'name = "speed"'),
+    ('name = "pack_counter"', 'name = "010C"'),
+    ('name = "pack_counter"', 'name = "0c"'),
+    ('name = "pack_counter"', 'name = "pid:0c"'),
+    ('name = "pack_counter"', 'name = "a:b"'),
+    ('vss = "Vehicle.Demo.Counter"', 'vss = "Vehicle.Speed"'),
+    ('vss = "Vehicle.Demo.Counter"', 'vss = "a:b"'),
+    ('formula = "A * 256 + B"', 'formula = "A + "'),
+    ('formula = "A * 256 + B"', 'formula = ""'),
+    ('formula = "A * 256 + B"', 'formula = 42'),
 ])
 def test_invalid_pack_fields_are_rejected_with_file_and_field(tmp_path, old, new):
     text = GOOD_PACK if old == new else _swap(GOOD_PACK, old, new)
     with pytest.raises(PackError) as e:
-        _load_text(tmp_path, text, "bad.yaml")
-    assert "bad.yaml" in str(e.value)
+        _load_text(tmp_path, text, "bad.toml")
+    assert "bad.toml" in str(e.value)
 
 
 @pytest.mark.parametrize("text", [
-    "- 1\n- 2\n",
-    "name: t\nmatch: 42\n",
-    "name: t\nmatch:\n  wmi: 42\n",
-    "name: t\nmatch:\n  wmi: [\"TOOLONG\"]\n",
-    "name: t\nmatch:\n  wmi: [\"4T1\"]\n  year_from: \"2014\"\n",
-    "name: t\nmatch:\n  wmi: [\"4T1\"]\n  year_from: true\n",
-    "name: t\nmatch:\n  wmi: [\"4T1\"]\n  year_from: 2020\n  year_to: 2010\n",
-    "name: t\nmatch:\n  wmi: [\"4T1\"]\n  year_from: 1700\n",
-    "name: t\ndids: 42\n",
-    "name: t\ndids:\n  - 42\n",
+    "= not toml\n",
+    'name = "t"\nmatch = 42\n',
+    'name = "t"\n[match]\nwmi = 42\n',
+    'name = "t"\n[match]\nwmi = ["TOOLONG"]\n',
+    'name = "t"\n[match]\nwmi = ["4T1"]\nyear_from = "2014"\n',
+    'name = "t"\n[match]\nwmi = ["4T1"]\nyear_from = true\n',
+    'name = "t"\n[match]\nwmi = ["4T1"]\nyear_from = 2020\nyear_to = 2010\n',
+    'name = "t"\n[match]\nwmi = ["4T1"]\nyear_from = 1700\n',
+    'name = "t"\ndids = 42\n',
+    'name = "t"\ndids = [42]\n',
 ])
 def test_invalid_pack_shapes_are_rejected(tmp_path, text):
     with pytest.raises(PackError) as e:
-        _load_text(tmp_path, text, "bad.yaml")
-    assert "bad.yaml" in str(e.value)
+        _load_text(tmp_path, text, "bad.toml")
+    assert "bad.toml" in str(e.value)
 
 
 def test_pack_match_uses_wmi_and_year_bounds():
@@ -228,9 +230,9 @@ def test_installed_pack_leaves_a_nonmatching_car_alone(sim, isolated_home):
 def test_invalid_pack_files_do_not_break_standard_reads(sim, isolated_home, capsys):
     dest = isolated_home / "packs"
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "bad-syntax.yaml").write_text("dids: [oops\n")
-    (dest / "bad-keys.yaml").write_text("name: x\ndids:\n  - name: only-a-name\n")
-    shutil.copy(PACK, dest / "example.yaml")
+    (dest / "bad-syntax.toml").write_text("dids = [oops\n")
+    (dest / "bad-keys.toml").write_text('name = "x"\n[[dids]]\nname = "only-a-name"\n')
+    shutil.copy(PACK, dest / "example.toml")
 
     v = sim(PACK_DEMO)
     assert v.read("coolant").value == 90
@@ -242,15 +244,15 @@ def test_invalid_pack_files_do_not_break_standard_reads(sim, isolated_home, caps
     assert u.readiness()["distance_since_clear"] == 11
     assert u.readiness()["warmups_since_clear"] == 2
     err = capsys.readouterr().err
-    assert "bad-syntax.yaml" in err and "bad-keys.yaml" in err
+    assert "bad-syntax.toml" in err and "bad-keys.toml" in err
 
 
 def test_malicious_pack_cannot_inject_commands(sim, isolated_home):
-    evil = _swap(GOOD_PACK, 'ecu: "7E0"', 'ecu: "7E0\\r04"')
-    evil = _swap(evil, "name: pack_counter", "name: evil_counter")
+    evil = _swap(GOOD_PACK, 'ecu = "7E0"', 'ecu = "7E0\\r04"')
+    evil = _swap(evil, 'name = "pack_counter"', 'name = "evil_counter"')
     dest = isolated_home / "packs"
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "evil.yaml").write_text(evil)
+    (dest / "evil.toml").write_text(evil)
 
     v = sim("p0420")
     assert v.read("coolant").value is not None
