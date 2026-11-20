@@ -6,7 +6,8 @@ import tomllib
 
 from . import paths
 
-KEYS = {"device": "Adapter URL: tcp://192.168.0.10:35000, serial:///dev/cu.X?baud=38400, sim:p0420"}
+KEYS = {"device": "Adapter URL: tcp://192.168.0.10:35000, serial:///dev/cu.X?baud=38400, sim:p0420",
+        "control_max_kph": "Motion control (T4): no gas commands at or above this speed. Default 40."}
 
 
 def load() -> dict:

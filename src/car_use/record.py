@@ -12,6 +12,10 @@ Files in the recording folder:
   obd.csv    t_unix, t_since_start, then one column per OBD signal.
   can.csv    t_unix, t_since_start, burst, id, data (hex). Frames within one
              burst are contiguous; between bursts the adapter was restarting.
+  signals.csv  with --decode DBC: t_unix, t_since_start, then speed_kph,
+             steering_angle_deg, steering_torque, brake_pressed, gas_pedal,
+             left_blinker, right_blinker in real units, up to 50 rows a second.
+             Each cell is the latest value heard; empty until first heard.
 
 One ELM327-class adapter can either ask OBD questions or listen, not both at
 once. With both --pids and --can, car-use alternates, which slows both.
@@ -49,10 +53,24 @@ def default_dir() -> Path:
 class Recorder:
     def __init__(self, vehicle, out_dir: Path | str | None = None, pids: list[str] | None = None,
                  can: bool = False, can_ids: list[str] | None = None, label: str = "",
-                 can_slice: float | None = None, say=None):
+                 can_slice: float | None = None, say=None, decode: str | None = None):
         self.v = vehicle
         self.elm = vehicle.elm
         self.out = Path(out_dir) if out_dir else default_dir()
+        self.decoder = None
+        if decode:
+            from .can.library import Decoder
+            try:
+                self.decoder = Decoder(decode)
+            except KeyError as e:
+                raise RecordError(str(e.args[0])) from None
+            if not self.decoder.spec:
+                raise RecordError(f"{decode} has no steering/brake/speed map yet; record raw "
+                                  "frames with --can and decode them later.")
+            if not can and not can_ids:
+                # Listen only to the messages the signals live on, so even a slow
+                # adapter keeps up with them.
+                can_ids = self.decoder.ids()
         self.can = bool(can or can_ids)
         self.can_ids = [validate_id(i) for i in can_ids] if can_ids else []
         self.label = label
@@ -109,6 +127,9 @@ class Recorder:
             "obd": ({"file": "obd.csv", "signals": self.pids, "units": units}
                     if self.pids else None),
             "can": ({"file": "can.csv", "ids_filter": self.can_ids or None} if self.can else None),
+            "decoded": ({"file": "signals.csv", "dbc": self.decoder.name,
+                         "source": "opendbc (MIT), bundled with car-use",
+                         "columns": SIGNAL_UNITS} if self.decoder else None),
             "skipped_signals": self._unsupported or None,
         }
 
@@ -122,6 +143,11 @@ class Recorder:
         self._write_meta(meta)
         obd_f = (self.out / "obd.csv").open("w", newline="", encoding="utf-8") if self.pids else None
         can_f = (self.out / "can.csv").open("w", newline="", encoding="utf-8") if self.can else None
+        sig_f = (self.out / "signals.csv").open("w", newline="", encoding="utf-8") if self.decoder else None
+        sig_w = csv.writer(sig_f) if sig_f else None
+        if sig_w:
+            sig_w.writerow(["t_unix", "t_since_start", *SIGNAL_UNITS])
+        last_row = -1.0
         obd_w = csv.writer(obd_f) if obd_f else None
         can_w = csv.writer(can_f) if can_f else None
         if obd_w:
@@ -170,8 +196,15 @@ class Recorder:
                         can_w.writerow([f"{f.wall:.3f}", f"{f.mono - t0:.3f}", bursts, f.id,
                                         f.data.hex().upper()])
                         ids.add(f.id)
+                        if self.decoder and self.decoder.feed(f.id, f.data) is not None \
+                                and f.mono - last_row >= 0.02:
+                            last_row = f.mono
+                            sig_w.writerow([f"{f.wall:.3f}", f"{f.mono - t0:.3f}",
+                                            *[_cell(v) for v in self.decoder.row().values()]])
                     frames += len(got)
                     can_f.flush()
+                    if sig_f:
+                        sig_f.flush()
                 if time.monotonic() >= next_progress:
                     next_progress += progress_every
                     self.say(_progress(time.monotonic() - t0, rows, frames, len(ids)))
@@ -187,7 +220,7 @@ class Recorder:
                     listener.__exit__(None, None, None)
                 except (TransportError, ElmError):
                     pass
-            for fh in (obd_f, can_f):
+            for fh in (obd_f, can_f, sig_f):
                 if fh:
                     fh.close()
         elapsed = time.monotonic() - t0
@@ -202,6 +235,7 @@ class Recorder:
             "can_ids": sorted(ids) if self.can else None,
             "can_bursts": bursts if self.can else None,
             "can_buffer_full": buffer_full if self.can else None,
+            "decoded_frames": self.decoder.decoded if self.decoder else None,
         }
         self._write_meta(meta)
         meta["folder"] = str(self.out)
@@ -209,6 +243,46 @@ class Recorder:
 
     def _write_meta(self, meta: dict) -> None:
         (self.out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+
+SIGNAL_UNITS = {"speed_kph": "km/h", "steering_angle_deg": "degrees, left positive on most cars",
+                "steering_torque": "the car's own units (see the DBC)", "brake_pressed": "0/1",
+                "gas_pedal": "the car's own units (see the DBC)", "left_blinker": "0/1",
+                "right_blinker": "0/1"}
+
+
+def decode_folder(folder: Path | str, dbc: str) -> dict:
+    """Decode an earlier recording's can.csv into signals.csv with a DBC map."""
+    from .can.library import Decoder
+    folder = Path(folder)
+    src = folder / "can.csv"
+    if not src.exists():
+        raise RecordError(f"{src} not found: record with --can first.")
+    try:
+        dec = Decoder(dbc)
+    except KeyError as e:
+        raise RecordError(str(e.args[0])) from None
+    rows = 0
+    last = -1.0
+    with src.open(newline="", encoding="utf-8") as fin, \
+            (folder / "signals.csv").open("w", newline="", encoding="utf-8") as fout:
+        w = csv.writer(fout)
+        w.writerow(["t_unix", "t_since_start", *SIGNAL_UNITS])
+        for r in csv.DictReader(fin):
+            if dec.feed(r["id"], bytes.fromhex(r["data"])) is None:
+                continue
+            t = float(r["t_since_start"])
+            if t - last >= 0.02:
+                last = t
+                w.writerow([r["t_unix"], r["t_since_start"], *[_cell(v) for v in dec.row().values()]])
+                rows += 1
+    meta_p = folder / "meta.json"
+    if meta_p.exists():
+        meta = json.loads(meta_p.read_text(encoding="utf-8"))
+        meta["decoded"] = {"file": "signals.csv", "dbc": dbc, "source": "opendbc (MIT), bundled with car-use",
+                           "columns": SIGNAL_UNITS, "decoded_frames": dec.decoded}
+        meta_p.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    return {"folder": str(folder), "dbc": dbc, "rows": rows, "decoded_frames": dec.decoded}
 
 
 def _cell(value) -> str:

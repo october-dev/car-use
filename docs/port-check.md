@@ -42,7 +42,19 @@ brake: best guess first
 
 Run it twice. A lead that shows up both times is real. Rolling counters and checksums change all the time, so they never show up as leads.
 
-Try it on a virtual car first: `car-use can-check --sim open-bus --find all`. Every other virtual car keeps its port silent, like a car with a gateway.
+Try it on a virtual car first: `car-use can-check --sim open-bus --find all`. `hyundai-bus` is the same idea with a real Hyundai / Kia layout. Every other virtual car keeps its port silent, like a car with a gateway.
+
+### When a known map fits
+
+car-use bundles 20 DBC maps from comma's [opendbc](https://github.com/commaai/opendbc) (`car-use dbc list`). If the ids it hears line up with one, `can-check` says so and names each lead:
+
+```
+layout: looks like Hyundai / Kia (CAN, most 2015+ models) (hyundai_can_generated): 8 of 8 ids heard are in that map.
+steering: best guess first
+  - id 2B0 bytes 0-2: 381 different values, steady while still = SAS11.SAS_Angle in the Hyundai / Kia map
+```
+
+Then `car-use record --decode hyundai_can_generated` writes steering angle, brake, speed and indicators in real units. `layout: a weak match` means only a few ids coincide: treat it as a coincidence until `--find` agrees. Most Indian-market models (Maruti Suzuki, Tata, Mahindra) have no published map, which is why Port reports matter.
 
 ### What "hidden" doesn't mean
 

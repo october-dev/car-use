@@ -31,8 +31,12 @@ Commands:
   car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
   car-use can-check [--find steering,brake,indicator] [--report] [--model TEXT]
                                    does the OBD port carry the car's own CAN traffic?
-  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--seconds N] [--out DIR]
+  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC] [--seconds N] [--out DIR]
                                    log OBD readings and CAN frames to CSV for a drive
+  car-use dbc list|show NAME|decode FOLDER --dbc NAME
+                                   CAN maps bundled from opendbc; decode a recording
+  car-use control check|enable|disable|demo --sim
+                                   steering/gas/brake via opendbc + comma panda (off; T4)
   car-use mcp [--sim S]           local MCP server on stdin/stdout
   car-use --version
 """
@@ -218,6 +222,128 @@ def cmd_policy(args) -> int:
     return 0
 
 
+def cmd_dbc(args) -> int:
+    from .can import library as L
+    if args.action == "list":
+        rows = [{"dbc": n, "car": L.LABELS.get(n, ""), "decodes": list(L.SIGNALS.get(n, {}))}
+                for n in L.names()]
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for r in rows:
+                print(f"{r['dbc']:<46} {r['car']}")
+            print("\nFrom opendbc (github.com/commaai/opendbc, MIT). "
+                  "car-use can-check says which one fits a car.")
+        return 0
+    if not args.target:
+        print("Name a DBC (show) or a recording folder (decode).", file=sys.stderr)
+        return 2
+    if args.action == "show":
+        try:
+            d = L.load(args.target)
+        except KeyError as e:
+            print(e.args[0], file=sys.stderr)
+            return 1
+        info = {"dbc": d.name, "car": L.LABELS.get(d.name, ""), "messages": len(d.messages),
+                "decodes": {c: (v if isinstance(v, str) else v["sig"])
+                            for c, v in L.SIGNALS.get(d.name, {}).items()}}
+        if args.json:
+            info["all"] = {m.hex_id: {"name": m.name, "size": m.size, "signals": list(m.signals)}
+                           for m in d.messages.values()}
+            print(json.dumps(info, indent=2))
+        else:
+            print(f"{d.name}: {info['car']}, {info['messages']} messages")
+            for c, where in info["decodes"].items():
+                msg = d.messages[where.split(".")[0]]
+                print(f"  {c:<20} {where:<40} id {msg.hex_id}")
+        return 0
+    from .record import RecordError, decode_folder
+    if not args.dbc:
+        print("Which map? Add --dbc NAME (car-use dbc list).", file=sys.stderr)
+        return 2
+    try:
+        out = decode_folder(args.target, args.dbc)
+    except RecordError as e:
+        print(f"decode: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_control(args) -> int:
+    from .kernel import policy
+    if args.action == "check":
+        return _control_check()
+    if args.action in ("enable", "disable"):
+        vin = args.vin
+        if not vin:
+            from .connect import open_vehicle
+            try:
+                v = open_vehicle(_device(args))
+            except Exception as e:
+                print(f"Couldn't read the VIN ({e}). Pass --vin.", file=sys.stderr)
+                return 1
+            vin = v.vin
+            v.elm.close()
+            if getattr(v, "_emulator", None):
+                v._emulator.stop()
+        if not vin:
+            print("Could not read the VIN; pass --vin.", file=sys.stderr)
+            return 1
+        print(policy.set_tier(vin, "T4", args.action == "enable"))
+        return 0
+    if not getattr(args, "sim", None):
+        print("The demo only runs on the simulator: car-use control demo --sim", file=sys.stderr)
+        return 2
+    return _control_demo()
+
+
+def _control_check() -> int:
+    from .kernel import policy
+    from .control.session import DEFAULT_MAX_KPH
+    from .config import get
+    ok = sys.version_info[:2] == (3, 12)
+    print(f"python {sys.version_info.major}.{sys.version_info.minor}: "
+          + ("ok" if ok else "motion control needs 3.12 (comma's packages)"))
+    try:
+        import panda  # noqa: F401
+        import opendbc  # noqa: F401
+        print("panda + opendbc: installed")
+    except ImportError:
+        from .control.panda import INSTALL
+        print(f"panda + opendbc: not installed. {INSTALL}")
+    cars = [vin for vin, c in policy.load_policy().get("vehicles", {}).items() if "T4" in c.get("tiers", [])]
+    print("T4 (motion control) enabled for: " + (", ".join(f"VIN ...{v[-6:]}" for v in cars) or "no car"))
+    print(f"gas allowed below: {get('control_max_kph', DEFAULT_MAX_KPH)} km/h (car-use config set control_max_kph N)")
+    print("practice: car-use control demo --sim")
+    return 0
+
+
+def _control_demo() -> int:
+    import time as _t
+    from .control import open_session
+    with open_session("sim") as c:
+        sim = c.runner
+        _stderr("virtual car at 30 km/h, cruise engaged by the simulated driver")
+        c.arm()
+        for label, torque, secs in [("steer left", 0.35, 1.0), ("back to centre", -0.35, 1.0),
+                                    ("steer right", -0.35, 1.0), ("back to centre", 0.35, 1.0)]:
+            c.hold(secs, torque=torque)
+            print(f"{label:<16} {sim.pose()}")
+        c.hold(1.5, torque=0.0, accel=1.0)
+        print(f"{'gentle gas':<16} {sim.pose()}")
+        sim.driver(brake=True)
+        _t.sleep(0.1)
+        st = c.status()
+        print(f"{'driver brakes':<16} armed={st.armed} reason={st.reason!r}")
+        try:
+            c.steer(torque=0.5)
+            _t.sleep(0.1)
+        finally:
+            print(f"{'agent tries':<16} engaged={c.status().engaged}: commands no longer reach the car")
+    return 0
+
+
 def cmd_inspect(args) -> int:
     from .connect import open_vehicle, NoDevice
     from .inspection_report import build, render_html, render_markdown
@@ -349,7 +475,7 @@ def cmd_record(args) -> int:
         return 1
     try:
         rec = Recorder(v, out_dir=args.out, pids=pids, can=args.can, can_ids=can_ids,
-                       label=args.label or "", say=_stderr)
+                       label=args.label or "", say=_stderr, decode=args.decode)
         what = []
         if rec.pids:
             what.append("OBD " + ",".join(rec.pids))
@@ -531,6 +657,19 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--minutes", type=float)
     sp.add_argument("--out", help="folder to write (default ~/.car-use/recordings/<UTC time>)")
     sp.add_argument("--label", help="a name for this car or drive, e.g. car-3")
+    sp.add_argument("--decode", metavar="DBC",
+                    help="also write signals.csv in real units with this map (see car-use dbc list)")
+    sp = sub.add_parser("dbc")
+    sp.add_argument("action", choices=["list", "show", "decode"])
+    sp.add_argument("target", nargs="?", help="DBC name (show) or recording folder (decode)")
+    sp.add_argument("--dbc", help="for decode: which map")
+    sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("control")
+    sp.add_argument("action", choices=["check", "enable", "disable", "demo"])
+    sp.add_argument("--sim", nargs="?", const="healthy", default=argparse.SUPPRESS,
+                    help="demo: practise on the virtual car; enable/disable: a scenario's VIN")
+    sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--vin", help="for enable/disable: the car's VIN, if it can't be read")
     sp = sub.add_parser("audit")
     sp.add_argument("--verify", action="store_true")
     sp.add_argument("-n", type=int, default=20)
@@ -595,6 +734,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_record(args)
     if args.cmd == "audit":
         return cmd_audit(args)
+    if args.cmd == "dbc":
+        return cmd_dbc(args)
+    if args.cmd == "control":
+        return cmd_control(args)
     if args.cmd == "bench":
         return cmd_bench(args)
     if args.cmd == "maker":

@@ -165,6 +165,7 @@ def run(elm, vehicle=None, seconds: float = 5.0, find: list[str] | None = None,
     cap = listen(elm, seconds)
     out["listen"] = cap.summary()
     out["verdict"], out["why"] = cap.traffic()
+    out["layout"] = _layout(cap)
     out["next"] = _next(out["verdict"], out["engine_running"], bool(find))
     out["found"] = {}
     if find and out["verdict"] in ("open", "partial"):
@@ -184,13 +185,43 @@ def run(elm, vehicle=None, seconds: float = 5.0, find: list[str] | None = None,
                 if act:
                     act(None)
             say(f"Done with {name}. You can stop.")
+            cands = find_changes(still, moved, kind)
+            _name_candidates(cands, out["layout"])
             out["found"][name] = {
-                "candidates": find_changes(still, moved, kind),
+                "candidates": cands,
                 "still_frames": len(still.car_frames()),
                 "action_frames": len(moved.car_frames()),
                 "sampled": bool(still.buffer_full or moved.buffer_full),
             }
+        top = (out["layout"] or [{}])[0]
+        if top.get("confidence") == "strong" and any(
+                c.get("dbc_signal") for body in out["found"].values() for c in body["candidates"]):
+            out["next"] = (f"The {top['label']} map explains what moved. Record it in real units: "
+                           f"car-use record --decode {top['dbc']}")
     return out
+
+
+def _layout(cap: Capture) -> list[dict]:
+    """Which bundled DBC maps (from opendbc) best explain the ids heard."""
+    from ..can.library import match
+    lengths = {f.id: len(f.data) for f in cap.car_frames()}
+    return [m.to_dict() for m in match(lengths)] if lengths else []
+
+
+def _name_candidates(cands: list[dict], layout: list[dict]) -> None:
+    """Add the matching DBC signal's name to each lead, when a map fits."""
+    if not layout:
+        return
+    from ..can.library import which_signal
+    top = layout[0]
+    if top.get("confidence") != "strong":
+        return
+    for c in cands:
+        lo, hi = c["bytes"][0], c["bytes"][-1]
+        hit = which_signal(top["dbc"], c["id"], lo, hi, [int(b, 16) for b in c["bits"]])
+        if hit:
+            c["dbc_signal"] = {**hit, "dbc": top["dbc"]}
+            c["note"] += f" = {hit['message']}.{hit['signal']} in the {top['label']} map"
 
 
 def _engine_running(vehicle) -> bool | None:
@@ -245,8 +276,11 @@ def share_report(result: dict, vehicle=None, model: str | None = None) -> dict:
         "listen": {k: listen_.get(k) for k in ("seconds", "frames", "frames_per_s", "bursts",
                                                 "buffer_full", "sampled")},
         "ids": sorted((listen_.get("ids") or {}).keys()),
+        "layout": [{k: lay[k] for k in ("dbc", "known_ids", "heard_ids", "score")}
+                   for lay in result.get("layout") or []],
         "found": {
-            name: [{k: c[k] for k in ("id", "bytes", "bits", "values", "transitions", "note")}
+            name: [{k: c[k] for k in ("id", "bytes", "bits", "values", "transitions", "note", "dbc_signal")
+                    if k in c}
                    for c in body.get("candidates", [])]
             for name, body in (result.get("found") or {}).items()
         },
@@ -266,6 +300,18 @@ def render(result: dict) -> str:
         if lst.get("sampled"):
             lines.append(f"  The adapter overflowed {lst['buffer_full']} times (BUFFER FULL), so "
                          "this is a sample of the bus, not every frame.")
+    for i, lay in enumerate(result.get("layout") or []):
+        if i == 0:
+            how = "looks like" if lay.get("confidence") == "strong" else "a weak match, maybe"
+            lines.append(f"layout: {how} {lay['label']} ({lay['dbc']}): "
+                         f"{lay['known_ids']} of {lay['heard_ids']} ids heard are in that map.")
+            if lay.get("confidence") != "strong":
+                lines.append("  Too few ids line up to be sure. Run --find to check which bytes really move.")
+            if lay["signals"]:
+                lines.append(f"  It can decode: {', '.join(lay['signals'])}. "
+                             f"Record them with: car-use record --decode {lay['dbc']}")
+        else:
+            lines.append(f"  also possible: {lay['label']} ({lay['known_ids']} of {lay['heard_ids']} ids)")
     if result.get("engine_running") is False:
         lines.append("  The engine was not running.")
     for name, body in (result.get("found") or {}).items():

@@ -16,7 +16,7 @@ _state: dict = {"vehicle": None, "device": None}
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
            "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
            "dongle_doctor", "scenarios", "describe_dtc", "maker_info", "tune_ini", "engine_log",
-           "listen", "Series"]
+           "listen", "can_layout", "decode", "control", "Series"]
 
 
 def _configure(device: str | None) -> None:
@@ -209,6 +209,53 @@ def listen(seconds: float = 3.0, ids: list[str] | None = None):
     """
     from .obd.monitor import listen as _listen
     return _listen(car().elm, seconds, ids)
+
+
+def can_layout(capture) -> list[dict]:
+    """Which bundled DBC maps (from opendbc) best explain a listen() capture.
+
+    Best first, each with a "confidence" ("strong" or "weak") and the columns
+    it can decode. A strong match means `decode(capture, that_dbc)` gives
+    steering angle, brake and speed in real units."""
+    from .can.library import match
+    lengths = {f.id: len(f.data) for f in capture.car_frames()}
+    return [m.to_dict() for m in match(lengths)]
+
+
+def decode(capture, dbc: str = "auto") -> list[dict]:
+    """Decode a listen() capture with a DBC map: one row per decoded frame,
+    with wall-clock time and speed_kph, steering_angle_deg, steering_torque,
+    brake_pressed, gas_pedal, left_blinker, right_blinker (None until heard).
+    dbc="auto" uses the best strong match from can_layout()."""
+    from .can.library import Decoder
+    if dbc == "auto":
+        layout = [x for x in can_layout(capture) if x["confidence"] == "strong"]
+        if not layout:
+            raise ValueError("No bundled DBC map clearly fits this car; name one with dbc=...")
+        dbc = layout[0]["dbc"]
+    dec = Decoder(dbc)
+    rows = []
+    for f in capture.car_frames():
+        if dec.feed(f.id, f.data) is not None:
+            rows.append({"wall": round(f.wall, 3), **dec.row()})
+    return rows
+
+
+def control(device: str | None = None, max_kph: float | None = None):
+    """Motion control (tier T4): steer, gas and brake through opendbc and a comma panda.
+
+    Use as `with control() as c:`. Off unless the owner ran `car-use control
+    enable` and typed the acknowledgement; each session asks the owner again
+    at the terminal. device="sim" practises on a virtual car. Then:
+    c.arm(), c.steer(torque=-1..1) or c.steer(angle=deg), c.accel(m/s^2),
+    c.hold(seconds, torque=..., accel=...), c.status(), c.disarm().
+    Targets go stale after 0.3 s, and any brake, gas or wheel input from the
+    driver disarms the session.
+    """
+    from .control import open_session
+    if device is None and str(_state.get("device") or "").startswith("sim"):
+        device = "sim"
+    return open_session(device, kernel=_state.get("kernel"), max_kph=max_kph)
 
 
 def dongle_doctor(save: bool = True) -> dict:

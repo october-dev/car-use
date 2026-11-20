@@ -106,9 +106,9 @@ def test_tricked_agent_calls_are_denied_and_audited(sim):
 
 
 def test_refused_tier_enables_are_audited(monkeypatch):
-    for tier in ("T3", "T4"):
-        msg = policy.set_tier(HOSTILE_VIN, tier, True)
-        assert "cannot be enabled" in msg
+    assert "cannot be enabled" in policy.set_tier(HOSTILE_VIN, "T3", True)
+    # T4 (motion control) exists, but an agent with no terminal can't turn it on.
+    assert policy.set_tier(HOSTILE_VIN, "T4", True).startswith("Refusing")
     msg = policy.set_tier(HOSTILE_VIN, "T1D", True)
     assert msg.startswith("Refusing")
 

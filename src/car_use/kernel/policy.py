@@ -136,9 +136,24 @@ def ask_human(question: str, expect: str) -> bool:
     return answer == expect
 
 
-def set_tier(vin: str, tier: str, enable: bool) -> str:
+T4_WARNING = """T4 lets car-use send steering, gas and brake commands to this car through
+opendbc and a comma panda. It is off by default for a reason:
+
+  - Commands only reach the car while YOU have engaged its own cruise control,
+    and braking, pressing the gas or a firm hand on the wheel stops them.
+  - The panda's firmware caps steering torque; car-use caps gas at a speed
+    you set (control_max_kph, default 40 km/h) and lets go if commands stop.
+  - None of that makes it safe on its own. You are the driver the whole time.
+    Use it only where it is legal, ideally on closed ground first.
+  - Modifying how a car steers or brakes may void its warranty or insurance."""
+
+
+def set_tier(vin: str, tier: str, enable: bool, ask=None) -> str:
+    """Turn a tier on or off for one vehicle. Turning one on needs a person at a
+    terminal; T4 (motion control) also needs the acknowledgement typed out."""
+    ask = ask or ask_human
     tier = Tier(tier.upper()).value
-    if tier in ("T3", "T4"):
+    if tier == "T3":
         if enable:
             Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
                            reason="tier unavailable in this version of car-use")
@@ -150,10 +165,18 @@ def set_tier(vin: str, tier: str, enable: bool) -> str:
                            "at an interactive terminal")
             return ("Refusing: enabling a tier must be done by a person at an interactive "
                     "terminal, not by an agent or a script.")
-        if not ask_human(f"Enable {tier} for vehicle {vin}?", vin[-6:]):
+        if not ask(f"Enable {tier} for vehicle {vin}?", vin[-6:]):
             Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
                            reason="owner did not confirm")
             return "Not confirmed. Nothing changed."
+        if tier == "T4":
+            from ..control.session import ACKNOWLEDGEMENT
+            if not ask(T4_WARNING + "\n\nTo turn on motion control, type this sentence exactly:\n"
+                       + ACKNOWLEDGEMENT, ACKNOWLEDGEMENT):
+                Audit().append("deny", vin=vin, intent="policy.enable", tier=tier,
+                               reason="acknowledgement not typed")
+                return "The acknowledgement didn't match. Motion control stays off."
+            Audit().append("acknowledge", vin=vin, tier=tier, text=ACKNOWLEDGEMENT)
     pol = load_policy()
     veh = pol.setdefault("vehicles", {}).setdefault(vin, {"tiers": []})
     tiers = set(veh.get("tiers", []))
@@ -162,6 +185,30 @@ def set_tier(vin: str, tier: str, enable: bool) -> str:
     _write_policy(pol)
     Audit().append("policy", vin=vin, tier=tier, enabled=enable, by="human" if enable else "any")
     return f"{tier} {'enabled' if enable else 'disabled'} for {vin}."
+
+
+def acknowledged(vin: str) -> bool:
+    """True if the audit log (intact) holds a typed T4 acknowledgement for this
+    VIN after the last time T4 was turned off. A policy.toml edited by hand,
+    without the prompts, has none."""
+    ok, _ = Audit().verify()
+    if not ok:
+        return False
+    path = Audit().path
+    if not path.exists():
+        return False
+    acked = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        e = json.loads(line)
+        if e.get("vin") != vin or e.get("tier") != "T4":
+            continue
+        if e["kind"] == "acknowledge":
+            acked = True
+        elif e["kind"] == "policy" and e.get("enabled") is False:
+            acked = False
+    return acked
 
 
 class Kernel:

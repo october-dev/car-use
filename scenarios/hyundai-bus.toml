@@ -1,0 +1,98 @@
+notes = """Illustrative 2019 compact SUV whose OBD port carries its own CAN traffic,
+laid out exactly like opendbc's Hyundai / Kia map (hyundai_can_generated):
+steering angle in SAS11, the driver's steering torque in MDPS12, the brake
+switch in TCS13, indicators in CGW1, wheel speeds in WHL_SPD11. The frames
+are encoded with that DBC, so `car-use can-check` should name the layout and
+`car-use record --decode hyundai_can_generated` should read real units.
+Checksums and counters are left at zero; car-use only reads them."""
+
+[car]
+name = "Illustrative 2019 compact SUV with a Hyundai / Kia CAN layout (sim)"
+vin = "1CARUSE09K0HKB001"
+protocol = "6"
+
+[adapter]
+profile = "stn"
+
+[signals]
+rpm = { value = 780, jitter = 15 }
+speed = 0
+coolant = { value = 90, jitter = 0.5 }
+load = { value = 22, jitter = 1.5 }
+throttle = 15.3
+map = { value = 33, jitter = 1 }
+maf = { value = 2.7, jitter = 0.1 }
+iat = 33
+battery = { value = 14.2, jitter = 0.05 }
+runtime = { ramp_from = 240, ramp_to = 3840, seconds = 3600 }
+fuel = 61
+distance_since_clear = 8410
+warmups_since_clear = 260
+
+[monitors]
+misfire = "complete"
+fuel_system = "complete"
+components = "complete"
+catalyst = "complete"
+evap = "complete"
+o2_sensor = "complete"
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "SAS11"
+hz = 100
+[bus.messages.signals]
+SAS_Angle = { action = "steering", wave = "sine", min = -240, max = 240, period = 5, rest = 0 }
+SAS_Speed = { action = "steering", value = 60, rest = 0 }
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "MDPS12"
+hz = 100
+[bus.messages.signals]
+CR_Mdps_StrColTq = { action = "steering", wave = "sine", min = -120, max = 120, period = 2.5, rest = 0 }
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "TCS13"
+hz = 50
+[bus.messages.signals]
+DriverBraking = { action = "brake", wave = "square", min = 0, max = 1, period = 3, rest = 0 }
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "CGW1"
+hz = 10
+[bus.messages.signals]
+CF_Gway_TurnSigLh = { action = "indicator", wave = "square", min = 0, max = 1, period = 0.8, rest = 0 }
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "WHL_SPD11"
+hz = 50
+[bus.messages.signals]
+WHL_SPD_FL = 0
+WHL_SPD_FR = 0
+WHL_SPD_RL = 0
+WHL_SPD_RR = 0
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "EMS12"
+hz = 100
+[bus.messages.signals]
+PV_AV_CAN = 0
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "EMS11"
+hz = 100
+[bus.messages.signals]
+N = { value = 780, jitter = 15 }
+
+[[bus.messages]]
+dbc = "hyundai_can_generated"
+message = "CLU11"
+hz = 50
+[bus.messages.signals]
+CF_Clu_Vanz = 0

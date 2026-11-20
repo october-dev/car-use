@@ -96,6 +96,7 @@ Standard OBD has no reading for steering angle, the brake pedal or the indicator
 car-use can-check                                    # open, partial or hidden? sends nothing to the car
 car-use can-check --find steering,brake,indicator    # car parked, engine running: which messages move
 car-use can-check --sim open-bus --find all          # try it on a virtual car
+car-use can-check --sim hyundai-bus --find all       # a virtual car with a real Hyundai / Kia layout
 ```
 
 What's known about which makes leave the port open, and how to share what you find: [docs/port-check.md](docs/port-check.md).
@@ -105,9 +106,26 @@ What's known about which makes leave the port open, and how to share what you fi
 ```bash
 car-use record --label car-3                         # speed, rpm, throttle, load... to CSV
 car-use record --can-ids 025,1A0 --minutes 45        # the CAN messages can-check found
+car-use record --decode hyundai_can_generated        # steering angle, brake, speed... in real units
 ```
 
 Every row has a UTC timestamp, so it lines up with a dashcam. The folder keeps the WMI and model year, never the full VIN. Rates, file formats and syncing with a camera: [docs/recording.md](docs/recording.md).
+
+### CAN maps from opendbc
+
+car-use bundles 20 DBC maps from comma's [opendbc](https://github.com/commaai/opendbc) (MIT): Hyundai / Kia, Toyota, Honda, the VW group, MG, BYD, Tesla, Nissan, Mazda, GM and Subaru. When one fits, `can-check` says so (`layout: looks like Hyundai / Kia`) and names each signal it finds, and `record --decode` writes steering angle, brake, speed and indicators in real units. `car-use dbc list` shows them all. Indian-market models such as Maruti Suzuki, Tata and Mahindra have no published map yet; Port reports are how we build them.
+
+### Motion control (off by default)
+
+car-use can also steer, accelerate and brake supported cars through opendbc and a [comma panda](https://github.com/commaai/panda). It is off for every car until you turn it on yourself:
+
+```bash
+car-use control demo --sim      # practise on a virtual car first
+car-use control check           # what's installed, which cars have it on
+car-use control enable          # at your own terminal: confirm the car, type the acknowledgement
+```
+
+Commands only reach the car while you have its own cruise control engaged. Braking, pressing the gas or turning the wheel stops them at once, and the panda's firmware caps steering torque. You are the driver the whole time, and you're responsible for where you use it. It needs Python 3.12 and `pip install "pandacan @ git+https://github.com/commaai/panda"`. More in [docs/control.md](docs/control.md).
 
 ## No car? Use a virtual one.
 
@@ -141,6 +159,7 @@ PY
 | `healthy-ev` | Illustrative EV profile, not a real model. Almost no engine data, and nothing is wrong. | Tricky |
 | `two-ecu` | Engine and transmission both answer. Codes stay with the ECU that sent them. | Medium |
 | `open-bus` | The OBD port carries the car's own CAN traffic. Find steering, brake and indicator with `can-check --find`. | Medium |
+| `hyundai-bus` | Same idea, laid out exactly like opendbc's Hyundai / Kia map, so `can-check` names the layout and `record --decode` reads real units. | Medium |
 
 Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
 
@@ -222,12 +241,13 @@ First results: Claude Haiku 5.5 passed 12/12 with car-use and 11/12 without it, 
 
 ## Safe by default
 
-car-use can only read your car unless you allow more. It can never touch the brakes, steering or anything risky.
+car-use can only read your car unless you allow more. Steering, gas and brakes stay off unless you turn on motion control yourself and type an acknowledgement.
 
 - **Read-only to start.** It can look at your car's data but can't change anything. Coding, flashing and controlling parts are always refused.
 - **You stay in control.** Nothing changes unless you switch it on yourself, at your own computer, and say yes each time. Your agent can't do that for you.
+- **Motion control is opt-in, per car.** Only through a comma panda and opendbc's safety limits, only while you have cruise control engaged, and any touch of the brake, gas or wheel stops it.
 - **Everything is logged.** Every action goes into a log that can't be secretly edited. Check it with `car-use audit --verify`.
-- **Never allowed.** Turning off emissions systems, changing the odometer, messing with keys, or driving the car.
+- **Never allowed.** Turning off emissions systems, changing the odometer or messing with keys.
 
 ## Roadmap
 
@@ -248,3 +268,5 @@ uv sync && uv run pytest
 ## License
 
 MIT © [October](https://github.com/october-dev) · [car-use.dev](https://car-use.dev)
+
+The DBC files in `src/car_use/can/dbcs/` come from comma.ai's [opendbc](https://github.com/commaai/opendbc), MIT licensed (see `LICENSE.opendbc` there). Motion control uses opendbc and [panda](https://github.com/commaai/panda) when you install them.

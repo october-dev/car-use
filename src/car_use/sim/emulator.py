@@ -66,16 +66,12 @@ class CarState:
     def bus_payload(self, index: int) -> bytes:
         """The next payload of broadcast frame `index`, as the car would send it now."""
         spec = self.s.bus[index]
-        data = bytearray(spec["data"] or b"\x00")
         now = self.t()
+        if "message" in spec:
+            return spec["message"].encode({name: self._acted(f, now) for name, f in spec["signals"].items()})
+        data = bytearray(spec["data"] or b"\x00")
         for f in spec["fields"]:
-            action = f.get("action")
-            if action is not None:
-                started = self.actions.get(action)
-                value = (_field_value(f, now - started) if started is not None
-                         else f.get("rest", f.get("min", 0)))
-            else:
-                value = _field_value(f, now)
+            value = self._acted(f, now)
             byte = int(f.get("byte", 0))
             if "mask" in f:
                 mask = int(f["mask"])
@@ -93,6 +89,14 @@ class CarState:
             n = self._counters[index] = (self._counters[index] + 1) & 0x0F
             data[int(counter)] = (data[int(counter)] & 0xF0) | n
         return bytes(data)
+
+    def _acted(self, f: dict, now: float) -> float:
+        """A field's value now: it follows the simulated person if it has an action."""
+        action = f.get("action")
+        if action is None:
+            return _field_value(f, now)
+        started = self.actions.get(action)
+        return _field_value(f, now - started) if started is not None else f.get("rest", f.get("min", 0))
 
     def t(self) -> float:
         return time.monotonic() - self.t0

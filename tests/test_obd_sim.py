@@ -129,7 +129,7 @@ def test_clear_dtcs_needs_tier_and_confirmation(sim):
 def test_policy_enable_refuses_without_tty(monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     assert "Refusing" in policy.set_tier("4T1BF1FK0EU300042", "T1D", True)
-    assert "cannot be enabled" in policy.set_tier("4T1BF1FK0EU300042", "T4", True)
+    assert policy.set_tier("4T1BF1FK0EU300042", "T4", True).startswith("Refusing")
 
 
 def test_audit_chain_detects_tampering(sim):

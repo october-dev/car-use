@@ -22,6 +22,11 @@
                 action = "steering"|"brake"|"indicator" moves only while the
                 simulator plays the person doing that, and sits at `rest`
                 (default min) otherwise.
+    [[bus.messages]]  broadcast traffic laid out by a real DBC map (see
+                `car-use dbc list`): dbc = "hyundai_can_generated",
+                message = "SAS11", hz = 100, and [bus.messages.signals]
+                with signal = number or the same field spec as above
+                (value/jitter, wave, action, rest). Signals left out are 0.
 """
 from __future__ import annotations
 
@@ -160,4 +165,14 @@ def _bus(raw: dict) -> list[dict]:
         out.append({"id": ident, "hz": float(frame.get("hz", 10)), "data": data,
                     "counter": frame.get("counter"),
                     "fields": [dict(f) for f in frame.get("fields") or []]})
+    for msg in raw.get("messages") or []:
+        from ..can.library import load
+        m = load(str(msg["dbc"])).message(str(msg["message"]))
+        signals = {}
+        for name, spec in (msg.get("signals") or {}).items():
+            if name not in m.signals:
+                raise ValueError(f"bus message {m.name} in {msg['dbc']} has no signal {name!r}")
+            signals[name] = dict(spec) if isinstance(spec, dict) else {"value": spec}
+        out.append({"id": m.hex_id, "hz": float(msg.get("hz", 10)), "data": bytes(m.size),
+                    "counter": None, "fields": [], "message": m, "signals": signals})
     return out
