@@ -58,7 +58,8 @@ def default_dir() -> Path:
 class Recorder:
     def __init__(self, vehicle, out_dir: Path | str | None = None, pids: list[str] | None = None,
                  can: bool = False, can_ids: list[str] | None = None, label: str = "",
-                 can_slice: float | None = None, say=None, decode: str | None = None):
+                 can_slice: float | None = None, say=None, decode: str | None = None,
+                 sign: bool = False, asset_id: str | None = None):
         self.v = vehicle
         self.elm = vehicle.elm
         self.out = Path(out_dir) if out_dir else default_dir()
@@ -91,6 +92,14 @@ class Recorder:
             raise RecordError("This car does not use CAN on the OBD port (protocol "
                               f"{self.elm.info.protocol or 'unknown'}), so there is nothing to "
                               "listen to. Record OBD readings without --can.")
+        self.sign = sign
+        self.asset_id = asset_id
+        if sign:
+            from . import signing
+            try:
+                signing.device_key()           # fail now, not after an hour of driving
+            except (signing.SigningUnavailable, signing.DeviceKeyError) as e:
+                raise RecordError(str(e)) from None
         self.listen_only = getattr(vehicle, "listen_only", None)
         if self.listen_only and pids:
             raise RecordError("OBD readings (--pids) are requests, and this session is "
@@ -145,6 +154,9 @@ class Recorder:
             "can": ({"file": "can.csv", "ids_filter": self.can_ids or None} if self.can else None),
             "decoded": (_decoded_meta(self.decoder.name) if self.decoder else None),
             "skipped_signals": self._unsupported or None,
+            "signed": ({"manifest": "manifest.json", "signature": "manifest.sig",
+                        "chain": "chain.jsonl", "verify": "car-use verify <this folder>"}
+                       if self.sign else None),
         }
 
     def run(self, seconds: float | None = None, progress_every: float = 10.0) -> dict:
@@ -166,6 +178,7 @@ class Recorder:
         if flt_w:
             from .can.j1939 import FAULT_COLUMNS
             flt_w.writerow(["t_unix", "t_since_start", *FAULT_COLUMNS])
+        signer = None
         last_row = -1.0
         obd_w = csv.writer(obd_f) if obd_f else None
         can_w = csv.writer(can_f) if can_f else None
@@ -173,6 +186,14 @@ class Recorder:
             obd_w.writerow(["t_unix", "t_since_start", *self.pids])
         if can_w:
             can_w.writerow(["t_unix", "t_since_start", "burst", "id", "data"])
+        if self.sign:
+            from .signing import Signer
+            for fh in (obd_f, can_f, sig_f, flt_f):
+                if fh:
+                    fh.flush()
+            signer = Signer(self.out, [Path(fh.name).name for fh in (obd_f, can_f, sig_f, flt_f) if fh],
+                            asset={"vin": self.v.vin or None, "asset_id": self.asset_id,
+                                   "label": self.label or None})
         t0 = time.monotonic()
         rows = frames = bursts = buffer_full = 0
         ids: set[str] = set()
@@ -224,6 +245,8 @@ class Recorder:
                     for fh in (sig_f, flt_f):
                         if fh:
                             fh.flush()
+                if signer is not None:
+                    signer.checkpoint()
                 if time.monotonic() >= next_progress:
                     next_progress += progress_every
                     self.say(_progress(time.monotonic() - t0, rows, frames, len(ids)))
@@ -259,6 +282,15 @@ class Recorder:
         if self.j1939:
             meta["summary"]["j1939"] = _j1939_summary(self.decoder)
         self._write_meta(meta)
+        if signer is not None:
+            manifest = signer.finish(extra_files=["meta.json"])
+            from .kernel.policy import Audit
+            Audit().append("recording_signed", folder=str(self.out), device=manifest["device"],
+                           chain_head=manifest["chain"]["head"], chunks=manifest["chain"]["chunks"],
+                           manifest_sha256=__import__("hashlib").sha256(
+                               (self.out / "manifest.json").read_bytes()).hexdigest())
+            meta["signed"] = {"device": manifest["device"], "chunks": manifest["chain"]["chunks"],
+                              "chain_head": manifest["chain"]["head"]}
         meta["folder"] = str(self.out)
         return meta
 

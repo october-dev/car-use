@@ -27,12 +27,14 @@ Changelog = "https://github.com/october-dev/car-use/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 serial = ["pyserial>=3.5"]
 ble = ["bleak>=0.22"]
+# Signed recordings (car-use record --sign, car-use verify): Ed25519.
+sign = ["cryptography>=42"]
 
 [project.scripts]
 car-use = "car_use.run:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "cryptography>=42"]
 
 [build-system]
 requires = ["hatchling"]

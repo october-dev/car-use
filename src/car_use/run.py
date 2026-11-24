@@ -33,6 +33,9 @@ Commands:
                                    does the OBD port carry the car's own CAN traffic?
   car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC|j1939] [--seconds N] [--out DIR]
                                    log OBD readings and CAN frames to CSV for a drive
+  car-use record ... --sign [--asset ID]   hash-chain and sign the recording (car-use[sign])
+  car-use verify FOLDER [--key HEX]  intact or tampered, and which file or chunk
+  car-use key                      this computer's signing key (public part)
   car-use dbc list|show NAME|decode FOLDER --dbc NAME
                                    CAN maps bundled from opendbc; decode a recording
   car-use control check|enable|disable|demo --sim
@@ -499,7 +502,8 @@ def cmd_record(args) -> int:
     Kernel().session("record", v)
     try:
         rec = Recorder(v, out_dir=args.out, pids=pids, can=args.can, can_ids=can_ids,
-                       label=args.label or "", say=_stderr, decode=args.decode)
+                       label=args.label or "", say=_stderr, decode=args.decode,
+                       sign=args.sign, asset_id=args.asset)
         what = []
         if rec.pids:
             what.append("OBD " + ",".join(rec.pids))
@@ -520,8 +524,39 @@ def cmd_record(args) -> int:
         if getattr(v, "_emulator", None):
             v._emulator.stop()
     print(json.dumps({"folder": meta["folder"], "ended": meta["ended"],
-                      "error": meta.get("error"), "summary": meta["summary"]}, indent=2))
+                      "error": meta.get("error"), "summary": meta["summary"],
+                      **({"signed": meta["signed"]} if meta.get("signed") else {})}, indent=2))
     return 1 if meta.get("error") else 0
+
+
+def cmd_verify(args) -> int:
+    from . import signing
+    try:
+        result = signing.verify(args.folder, expect_key=args.key)
+    except signing.SigningUnavailable as e:
+        print(f"verify: {e}", file=sys.stderr)
+        return 2
+    except OSError as e:
+        print(f"verify: {e}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2) if args.json else signing.render(result), end="\n" if args.json else "")
+    return 0 if result["status"] == "intact" else 1
+
+
+def cmd_key(args) -> int:
+    from . import signing
+    try:
+        key = signing.device_key(create=False)
+    except signing.SigningUnavailable as e:
+        print(f"key: {e}", file=sys.stderr)
+        return 2
+    except signing.DeviceKeyError as e:
+        print(str(e))
+        return 1
+    pub = signing.public_hex(key)
+    print(f"device {signing.fingerprint(pub)}\npublic key {pub}\nfile {signing.key_path()}\n"
+          "This is a software key: anything that can read that file can sign as this device.")
+    return 0
 
 
 def cmd_audit(args) -> int:
@@ -696,6 +731,15 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--label", help="a name for this car or drive, e.g. car-3")
     sp.add_argument("--decode", metavar="DBC|j1939",
                     help="also write signals.csv in real units with this map (see car-use dbc list)")
+    sp.add_argument("--sign", action="store_true",
+                    help="hash-chain the files as they are written and sign a manifest "
+                         "(needs car-use[sign]); check later with car-use verify")
+    sp.add_argument("--asset", help="for --sign: an asset id for the machine, e.g. a fleet number")
+    sp = sub.add_parser("verify")
+    sp.add_argument("folder")
+    sp.add_argument("--key", help="require this signer: public key hex or device fingerprint")
+    sp.add_argument("--json", action="store_true")
+    sub.add_parser("key")
     sp = sub.add_parser("dbc")
     sp.add_argument("action", choices=["list", "show", "decode"])
     sp.add_argument("target", nargs="?", help="DBC name (show) or recording folder (decode)")
@@ -771,6 +815,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_record(args)
     if args.cmd == "audit":
         return cmd_audit(args)
+    if args.cmd == "verify":
+        return cmd_verify(args)
+    if args.cmd == "key":
+        return cmd_key(args)
     if args.cmd == "dbc":
         return cmd_dbc(args)
     if args.cmd == "control":
