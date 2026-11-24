@@ -29,7 +29,7 @@ Commands:
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log
   car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
-  car-use can-check [--find steering,brake,indicator] [--report] [--model TEXT] [--j1939]
+  car-use can-check [--find steering,brake,indicator] [--report] [--j1939] [--no-listen-only]
                                    does the OBD port carry the car's own CAN traffic?
   car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC|j1939] [--seconds N] [--out DIR]
                                    log OBD readings and CAN frames to CSV for a drive
