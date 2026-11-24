@@ -117,10 +117,24 @@ class AdapterInfo:
     extra: dict = field(default_factory=dict)
 
     @property
+    def number(self) -> str:
+        """The protocol without the auto marker: ATDPN "A6" (found by auto search) is 6.
+        "A" alone is protocol A, SAE J1939, which auto search never picks."""
+        return protocol_digit(self.protocol_number)
+
+    @property
     def is_can(self) -> bool:
-        # ATDPN returns e.g. "A6" (auto, protocol 6); protocols 6-9 are ISO 15765 CAN.
-        n = self.protocol_number.lstrip("A")
-        return n in {"6", "7", "8", "9"}
+        # Protocols 6-9 are ISO 15765 CAN; A is SAE J1939 (29-bit, 250 kbit/s).
+        return self.number in {"6", "7", "8", "9", "A"}
+
+    @property
+    def is_j1939(self) -> bool:
+        return self.number == "A"
+
+
+def protocol_digit(number: str) -> str:
+    n = (number or "").strip().upper()
+    return n[1:] if len(n) == 2 and n[0] == "A" else n
 
 
 class Elm327:
@@ -190,7 +204,7 @@ class Elm327:
 
     def _timeout_for(self, timeout: float | None) -> float:
         chosen = self.timeout if timeout is None else timeout
-        number = self.info.protocol_number.lstrip("A")
+        number = self.info.number
         if number in {"1", "2", "3", "4", "5"}:
             return max(chosen, 10.0)
         return chosen
@@ -276,7 +290,7 @@ class Elm327:
         different number.
         """
         target = validate_header(header)
-        number = self.info.protocol_number.lstrip("A")
+        number = self.info.number
         if number not in ("6", "8"):
             raise ElmError(request, "NOT SUPPORTED",
                            f"physical addressing needs CAN protocol 6 or 8 "

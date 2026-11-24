@@ -21,7 +21,9 @@ def resolve_device(device: str | None) -> str:
     return dev
 
 
-def open_vehicle(device: str | None = None, kernel=None) -> ObdVehicle:
+def open_vehicle(device: str | None = None, kernel=None, protocol: str | None = None) -> ObdVehicle:
+    """Connect. ``protocol`` (or the `protocol` setting) skips the auto search;
+    "A" is SAE J1939 for trucks and machines, which auto search never finds."""
     dev = resolve_device(device)
     emu = None
     scenario = None
@@ -32,7 +34,17 @@ def open_vehicle(device: str | None = None, kernel=None) -> ObdVehicle:
         scenario = load(dev.partition(":")[2] or "healthy")
         emu = Emulator(scenario).start()
         url = emu.url
+    protocol = protocol or config.get("protocol") or None
+    if protocol is None and scenario is not None and scenario.protocol.upper() == "A":
+        # A virtual J1939 machine: play the person who set protocol A for it.
+        protocol = "A"
     elm = Elm327(open_transport(url))
     v = ObdVehicle(elm, dev, kernel=kernel, scenario=scenario)
     v._emulator = emu   # keep alive for the vehicle's lifetime
-    return v.connect()
+    try:
+        return v.connect(protocol=protocol)
+    except BaseException:
+        elm.close()
+        if emu is not None:
+            emu.stop()
+        raise

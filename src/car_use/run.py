@@ -29,9 +29,9 @@ Commands:
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log
   car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
-  car-use can-check [--find steering,brake,indicator] [--report] [--model TEXT]
+  car-use can-check [--find steering,brake,indicator] [--report] [--model TEXT] [--j1939]
                                    does the OBD port carry the car's own CAN traffic?
-  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC] [--seconds N] [--out DIR]
+  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC|j1939] [--seconds N] [--out DIR]
                                    log OBD readings and CAN frames to CSV for a drive
   car-use dbc list|show NAME|decode FOLDER --dbc NAME
                                    CAN maps bundled from opendbc; decode a recording
@@ -232,7 +232,8 @@ def cmd_dbc(args) -> int:
         else:
             for r in rows:
                 print(f"{r['dbc']:<46} {r['car']}")
-            print("\nFrom opendbc (github.com/commaai/opendbc, MIT). "
+            print(f"{'j1939':<46} trucks, buses and machines: standard SAE J1939 parameters")
+            print("\nCar maps from opendbc (github.com/commaai/opendbc, MIT). "
                   "car-use can-check says which one fits a car.")
         return 0
     if not args.target:
@@ -385,6 +386,12 @@ def _stderr(text: str) -> None:
     print(f"[car-use] {text}", file=sys.stderr, flush=True)
 
 
+def _protocol(args) -> str | None:
+    if getattr(args, "j1939", False):
+        return "A"
+    return getattr(args, "protocol", None)
+
+
 def _positive(value, name: str) -> bool:
     import math
     if value is not None and (not math.isfinite(value) or value <= 0):
@@ -411,7 +418,7 @@ def cmd_can_check(args) -> int:
         if not _positive(value, name):
             return 2
     try:
-        v = open_vehicle(_device(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args))
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
@@ -466,7 +473,7 @@ def cmd_record(args) -> int:
     pids = [x.strip() for x in args.pids.split(",") if x.strip()] if args.pids else None
     can_ids = [x.strip() for x in args.can_ids.split(",") if x.strip()] if args.can_ids else None
     try:
-        v = open_vehicle(_device(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args))
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
@@ -639,6 +646,9 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("can-check")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--j1939", action="store_true",
+                    help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
+    sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
     sp.add_argument("--seconds", type=float, default=5.0, help="how long to listen first")
     sp.add_argument("--find", help="steering,brake,indicator or all: guided steps, car parked")
     sp.add_argument("--action-seconds", type=float, default=10.0,
@@ -650,6 +660,9 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("record")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--j1939", action="store_true",
+                    help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
+    sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
     sp.add_argument("--pids", help="OBD signals, comma-separated (default: speed,rpm,throttle,...)")
     sp.add_argument("--can", action="store_true", help="also listen to the CAN bus")
     sp.add_argument("--can-ids", help="only these CAN ids, e.g. 025,1A0 (implies --can)")
@@ -657,7 +670,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--minutes", type=float)
     sp.add_argument("--out", help="folder to write (default ~/.car-use/recordings/<UTC time>)")
     sp.add_argument("--label", help="a name for this car or drive, e.g. car-3")
-    sp.add_argument("--decode", metavar="DBC",
+    sp.add_argument("--decode", metavar="DBC|j1939",
                     help="also write signals.csv in real units with this map (see car-use dbc list)")
     sp = sub.add_parser("dbc")
     sp.add_argument("action", choices=["list", "show", "decode"])

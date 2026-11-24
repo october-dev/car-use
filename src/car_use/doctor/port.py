@@ -160,13 +160,22 @@ def run(elm, vehicle=None, seconds: float = 5.0, find: list[str] | None = None,
     out: dict = {"ts": time.time(), "adapter": {"identity": info.identity, "stn": info.stn},
                  "protocol": info.protocol, "protocol_number": info.protocol_number,
                  "simulated": vehicle is not None and getattr(vehicle, "scenario", None) is not None}
-    out["engine_running"] = _engine_running(vehicle)
+    listen_only = bool(getattr(vehicle, "listen_only", False) or getattr(elm, "listen_only", False))
+    # Asking the engine for rpm is an OBD request; in listen-only mode it is skipped.
+    out["engine_running"] = None if listen_only or info.is_j1939 else _engine_running(vehicle)
     say(f"Listening for {seconds:g} s. car-use sends nothing to the car while it listens.")
     cap = listen(elm, seconds)
     out["listen"] = cap.summary()
     out["verdict"], out["why"] = cap.traffic()
-    out["layout"] = _layout(cap)
-    out["next"] = _next(out["verdict"], out["engine_running"], bool(find))
+    out["j1939"] = _j1939(cap)
+    out["bus"] = "j1939" if out["j1939"] else ("can" if cap.ids() else None)
+    if out["j1939"]:
+        rpm = (out["j1939"]["signals"].get("engine_speed_rpm") or {}).get("value")
+        if rpm is not None:
+            out["engine_running"] = rpm > 300
+    # Car maps (opendbc) do not apply to a J1939 machine.
+    out["layout"] = [] if out["j1939"] else _layout(cap)
+    out["next"] = _next(out["verdict"], out["engine_running"], bool(find), bool(out["j1939"]))
     out["found"] = {}
     if find and out["verdict"] in ("open", "partial"):
         for name in find:
@@ -199,6 +208,15 @@ def run(elm, vehicle=None, seconds: float = 5.0, find: list[str] | None = None,
             out["next"] = (f"The {top['label']} map explains what moved. Record it in real units: "
                            f"car-use record --decode {top['dbc']}")
     return out
+
+
+def _j1939(cap: Capture) -> dict | None:
+    """If the bus is J1939 (trucks, machines), what it is and what it says."""
+    from ..can import j1939
+    bus = j1939.recognise(cap.ids())
+    if not bus["j1939"]:
+        return None
+    return {**bus, **j1939.decode_frames(cap.car_frames())}
 
 
 def _layout(cap: Capture) -> list[dict]:
@@ -234,7 +252,10 @@ def _engine_running(vehicle) -> bool | None:
     return None if rpm is None else rpm > 300
 
 
-def _next(verdict: str, engine_running: bool | None, found: bool) -> str:
+def _next(verdict: str, engine_running: bool | None, found: bool, j1939: bool = False) -> str:
+    if j1939:
+        return ("This is a J1939 bus. Record its standard signals and active faults with: "
+                "car-use record --decode j1939")
     if verdict in ("open", "partial") and not found:
         return ("With the car parked and the engine running, run car-use can-check --find "
                 "steering,brake,indicator to see which messages carry them.")
@@ -244,6 +265,10 @@ def _next(verdict: str, engine_running: bool | None, found: bool) -> str:
     if verdict == "hidden" and engine_running is False:
         return ("Some cars only put traffic on the port with the engine running. Start the engine "
                 "(in a ventilated place) and run can-check again.")
+    if verdict == "hidden" and engine_running is None:
+        return ("Nothing reached the port. On a car, start the engine (in a ventilated place) and "
+                "run can-check again; standard OBD still works. On a truck or machine "
+                "(9-pin Deutsch port, J1939 at 250 kbit/s) run car-use can-check --j1939.")
     if verdict == "hidden":
         return ("Standard OBD still works (car-use record without --can). For steering or brake, "
                 "look for maker-specific Mode 22 identifiers (a vehicle pack).")
@@ -273,6 +298,13 @@ def share_report(result: dict, vehicle=None, model: str | None = None) -> dict:
         "adapter": {"reported": (result.get("adapter") or {}).get("identity"),
                     "stn": (result.get("adapter") or {}).get("stn")},
         "verdict": result.get("verdict"),
+        "bus": result.get("bus"),
+        "listen_only": (result.get("listen_only") or {}).get("on"),
+        "j1939": ({"known_pgns": result["j1939"]["known_pgns"],
+                   "sources": result["j1939"]["sources"],
+                   "faults": [{k: f[k] for k in ("spn", "fmi", "source")}
+                              for f in result["j1939"]["faults"]]}
+                  if result.get("j1939") else None),
         "listen": {k: listen_.get(k) for k in ("seconds", "frames", "frames_per_s", "bursts",
                                                 "buffer_full", "sampled")},
         "ids": sorted((listen_.get("ids") or {}).keys()),
@@ -300,6 +332,7 @@ def render(result: dict) -> str:
         if lst.get("sampled"):
             lines.append(f"  The adapter overflowed {lst['buffer_full']} times (BUFFER FULL), so "
                          "this is a sample of the bus, not every frame.")
+    lines += _render_j1939(result.get("j1939"))
     for i, lay in enumerate(result.get("layout") or []):
         if i == 0:
             how = "looks like" if lay.get("confidence") == "strong" else "a weak match, maybe"
@@ -325,3 +358,29 @@ def render(result: dict) -> str:
             lines.append(f"  - {c['note']}")
     lines.append(f"next: {result['next']}")
     return "\n".join(lines) + "\n"
+
+
+def _render_j1939(bus: dict | None) -> list[str]:
+    if not bus:
+        return []
+    from ..can.j1939 import SOURCES
+    lines = [f"bus: J1939 (the CAN dialect of trucks, buses and heavy machines)", f"  {bus['why']}"]
+    for key, s in bus["signals"].items():
+        value = "not available" if s["value"] is None else f"{s['value']:g} {s['unit']}"
+        src = s["source"]
+        lines.append(f"  {key:<18} {value:<16} SPN {s['spn']}, from {src:02X}"
+                     + (f" {SOURCES[src]}" if src in SOURCES else ""))
+    for sa, dm1 in bus["dm1"].items():
+        lamps = [n for n, state in dm1["lamps"].items() if state == "on"]
+        how = " (multi-packet, BAM)" if dm1.get("multi_packet") else ""
+        name = f" {dm1['source_name']}" if dm1.get("source_name") else ""
+        lines.append(f"  DM1 from {sa}{name}{how}: lamps on: {', '.join(lamps) or 'none'}")
+        if not dm1["faults"]:
+            lines.append("    no active faults")
+        for f in dm1["faults"]:
+            oc = f", seen {f['occurrences']}x" if f["occurrences"] is not None else ""
+            lines.append(f"    - {f['text']}{oc}")
+    tp = bus.get("transport") or {}
+    if tp.get("dropped"):
+        lines.append(f"  {tp['dropped']} multi-packet message(s) were incomplete (adapter overflowed?).")
+    return lines

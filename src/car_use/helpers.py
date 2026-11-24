@@ -16,7 +16,7 @@ _state: dict = {"vehicle": None, "device": None}
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
            "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
            "dongle_doctor", "scenarios", "describe_dtc", "maker_info", "tune_ini", "engine_log",
-           "listen", "can_layout", "decode", "control", "Series"]
+           "listen", "can_layout", "decode", "j1939", "control", "Series"]
 
 
 def _configure(device: str | None) -> None:
@@ -239,6 +239,26 @@ def decode(capture, dbc: str = "auto") -> list[dict]:
         if dec.feed(f.id, f.data) is not None:
             rows.append({"wall": round(f.wall, 3), **dec.row()})
     return rows
+
+
+def j1939(seconds: float = 5.0, capture=None) -> dict:
+    """Listen to a J1939 bus (trucks, buses, cranes, construction and farm
+    machines, generator sets) and decode its standard signals and active faults.
+
+    Sends nothing. Pass a listen() capture to decode that instead. Returns
+    {"j1939": bool, "why", "signals": {key: {value, unit, spn, pgn, name,
+    source}}, "dm1": {source: {lamps, faults}}, "faults": [...], "pgns",
+    "transport"}. A value of None means the machine sent "not available" or
+    "error" for it. Keys: engine_speed_rpm, coolant_temp_c, oil_pressure_kpa,
+    engine_hours_h, fuel_level_pct, fuel_rate_lph, vehicle_speed_kph,
+    battery_v, ambient_temp_c. On a real machine connect with protocol A
+    (`car-use config set protocol A`); the simulator's crane-j1939 does it.
+    """
+    from .can import j1939 as _j
+    if capture is None:
+        capture = listen(seconds)
+    bus = _j.recognise(capture.ids())
+    return {**bus, **_j.decode_frames(capture.car_frames())}
 
 
 def control(device: str | None = None, max_kph: float | None = None):
