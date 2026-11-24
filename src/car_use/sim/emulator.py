@@ -30,7 +30,12 @@ PROTOCOLS = {
     "4": "ISO 14230-4 (KWP 5BAUD)", "5": "ISO 14230-4 (KWP FAST)",
     "6": "ISO 15765-4 (CAN 11/500)", "7": "ISO 15765-4 (CAN 29/500)",
     "8": "ISO 15765-4 (CAN 11/250)", "9": "ISO 15765-4 (CAN 29/250)",
+    "A": "SAE J1939 (CAN 29/250)",
 }
+# Bus speed (kbit/s) of each CAN protocol. A listening adapter set to the
+# wrong speed hears nothing useful, so the virtual J1939 machine stays silent
+# unless the adapter is at 250 kbit/s.
+BITRATE = {"6": 500, "7": 500, "8": 250, "9": 250, "A": 250}
 
 
 class CarState:
@@ -63,10 +68,24 @@ class CarState:
             else:
                 self.actions[action] = self.t()
 
+    def bus_frames(self, index: int) -> list[tuple[float, str, bytes]]:
+        """What broadcast entry `index` puts on the bus each period: (delay, id, data).
+
+        One frame for most entries; a multi-packet DM1 is a TP.CM then its
+        TP.DT packets, spaced out."""
+        spec = self.s.bus[index]
+        if "sequence" in spec:
+            return list(spec["sequence"])
+        return [(0.0, spec["id"], self.bus_payload(index))]
+
     def bus_payload(self, index: int) -> bytes:
         """The next payload of broadcast frame `index`, as the car would send it now."""
         spec = self.s.bus[index]
         now = self.t()
+        if "j1939" in spec:
+            from ..can.j1939 import encode_pgn
+            g = spec["j1939"]
+            return encode_pgn(g["pgn"], {n: self._acted(f, now) for n, f in g["spns"].items()})
         if "message" in spec:
             return spec["message"].encode({name: self._acted(f, now) for name, f in spec["signals"].items()})
         data = bytearray(spec["data"] or b"\x00")
@@ -193,7 +212,16 @@ class _Session:
         return (" " if self.spaces else "").join(f"{b:02X}" for b in data)
 
     def _protocol_number(self) -> str:
-        return self.protocol.lstrip("A")
+        p = self.protocol
+        return p[1:] if len(p) == 2 and p[0] == "A" else p
+
+    def hears_bus(self) -> bool:
+        """Whether the adapter's protocol is at the car's bus speed. Only the
+        J1939 machine checks; older scenarios kept their behaviour."""
+        car_p = self.car.s.protocol.upper()
+        if car_p != "A":
+            return True
+        return BITRATE.get(self._protocol_number()) == BITRATE["A"]
 
     def _non_can(self) -> bool:
         return self._protocol_number() in {"1", "2", "3", "4", "5"}
@@ -311,6 +339,12 @@ class _Session:
         if self.car.s.ignition != "run" and self.car.s.ignition != "accessory":
             return ["SEARCHING...", "UNABLE TO CONNECT"]
         out = []
+        if self.car.s.protocol.upper() == "A":
+            # A J1939 machine: auto search never finds protocol A, and its ECUs do
+            # not answer OBD-II requests.
+            if self.protocol == "0":
+                return ["SEARCHING...", "UNABLE TO CONNECT"]
+            return ["NO DATA"] if self.hears_bus() else ["CAN ERROR"]
         if self.protocol == "0":
             out.append("SEARCHING...")
             self.protocol = "A" + self.car.s.protocol
@@ -354,8 +388,9 @@ class _Session:
                 v += 0.4
             return [f"{v:.1f}V"]
         if c == "DP":
-            p = self.protocol.lstrip("A")
-            return [("AUTO, " if self.protocol.startswith("A") else "") + PROTOCOLS.get(p, "AUTO")]
+            p = self._protocol_number()
+            auto = len(self.protocol) == 2 and self.protocol.startswith("A")
+            return [("AUTO, " if auto else "") + PROTOCOLS.get(p, "AUTO")]
         if c == "DPN":
             return [self.protocol]
         for flag, attr in (("E", "echo"), ("L", "linefeed"), ("S", "spaces"), ("H", "headers")):
@@ -363,8 +398,10 @@ class _Session:
                 setattr(self, attr, c.endswith("1"))
                 return ["OK"]
         if c.startswith("SP") or c.startswith("TP"):
-            p = c[2:].lstrip("A") or "0"
-            self.protocol = "0" if p == "0" else p
+            p = c[2:]
+            if len(p) == 2 and p[0] == "A":
+                p = p[1:]                   # "ATSPA6": auto, starting with 6
+            self.protocol = p or "0"
             return ["OK"]
         if c.startswith("SH"):
             self.tx_header = c[2:].upper() or "7DF"
@@ -554,12 +591,13 @@ class _Handler(socketserver.BaseRequestHandler):
         the client went away.
         """
         car = sess.car
-        frames = car.s.bus if car.s.ignition in ("run", "accessory") else []
+        frames = car.s.bus if car.s.ignition in ("run", "accessory") and sess.hears_bus() else []
         rate = MONITOR_LINES_PER_S.get(sess.profile, MONITOR_LINES_PER_S["genuine"])
         capacity = MONITOR_BUFFER_LINES.get(sess.profile, MONITOR_BUFFER_LINES["genuine"])
         last = time.monotonic()
         due = [last + random.uniform(0, 1 / f["hz"]) for f in frames]
         backlog: deque[str] = deque()
+        queued: list[tuple[float, str, bytes]] = []   # frames due later (BAM packets)
         credit = 0.0
         while not interrupted:
             ready, _, _ = select.select([sock], [], [], 0.004)
@@ -574,8 +612,14 @@ class _Handler(socketserver.BaseRequestHandler):
                 if now - due[i] > 0.5:
                     due[i] = now
                 while due[i] <= now:
+                    at = due[i]
                     due[i] += 1 / f["hz"]
-                    line = sess.monitor_line(f["id"], car.bus_payload(i))
+                    queued.extend((at + delay, ident, data) for delay, ident, data in car.bus_frames(i))
+            if queued:
+                queued.sort(key=lambda q: q[0])
+                while queued and queued[0][0] <= now:
+                    _, ident, data = queued.pop(0)
+                    line = sess.monitor_line(ident, data)
                     if line is not None:
                         backlog.append(line)
             credit = min(credit + (now - last) * rate, 4.0)

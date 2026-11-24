@@ -27,6 +27,16 @@
                 message = "SAS11", hz = 100, and [bus.messages.signals]
                 with signal = number or the same field spec as above
                 (value/jitter, wave, action, rest). Signals left out are 0.
+    [[bus.j1939]]  a J1939 parameter group broadcast by one ECU (use
+                protocol = "A" in [car]): pgn = 61444, source = 0 (source
+                address), priority = 3, hz = 100, and [bus.j1939.spns] with
+                SPN number = number or a field spec (value/jitter, wave).
+                Only SPNs in car-use's J1939 table; other bytes are FF.
+    [[bus.dm1]]  active faults (DM1, PGN 65226) from one ECU: source, hz
+                (default 1), lamps = {amber_warning = "on", ...}, faults =
+                [{spn, fmi, oc}]. More than one fault does not fit in a frame,
+                so it goes out as a BAM: TP.CM then TP.DT packets `gap_ms`
+                apart (default 50, the J1939-21 minimum).
 """
 from __future__ import annotations
 
@@ -175,4 +185,27 @@ def _bus(raw: dict) -> list[dict]:
             signals[name] = dict(spec) if isinstance(spec, dict) else {"value": spec}
         out.append({"id": m.hex_id, "hz": float(msg.get("hz", 10)), "data": bytes(m.size),
                     "counter": None, "fields": [], "message": m, "signals": signals})
+    from ..can import j1939 as J
+    for grp in raw.get("j1939") or []:
+        pgn, sa = int(grp["pgn"]), int(grp.get("source", 0))
+        spns = {}
+        for k, spec in (grp.get("spns") or {}).items():
+            spn = J.BY_SPN.get(int(k))
+            if spn is None or spn.pgn != pgn:
+                raise ValueError(f"bus.j1939 PGN {pgn}: SPN {k} is not in car-use's table for it")
+            spns[int(k)] = dict(spec) if isinstance(spec, dict) else {"value": spec}
+        out.append({"id": J.build_id(pgn, sa, int(grp.get("priority", 6))),
+                    "hz": float(grp.get("hz", 1)), "data": b"\xFF" * 8, "counter": None,
+                    "fields": [], "j1939": {"pgn": pgn, "spns": spns}})
+    for dm in raw.get("dm1") or []:
+        sa = int(dm.get("source", 0))
+        payload = J.encode_dm1(dict(dm.get("lamps") or {}), [dict(f) for f in dm.get("faults") or []])
+        if len(payload) <= 8:
+            frames = [(0.0, J.build_id(J.PGN_DM1, sa, 6), payload)]
+        else:
+            gap = float(dm.get("gap_ms", 50)) / 1000
+            frames = [(i * gap, ident, data)
+                      for i, (ident, data) in enumerate(J.bam_frames(J.PGN_DM1, payload, sa))]
+        out.append({"id": frames[0][1], "hz": float(dm.get("hz", 1)), "data": frames[0][2],
+                    "counter": None, "fields": [], "sequence": frames})
     return out

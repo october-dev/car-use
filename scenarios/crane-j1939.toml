@@ -1,0 +1,116 @@
+notes = """Illustrative truck-mounted crane, parked with the crane working: the
+engine drives the hydraulic pump through a PTO at about 1200 rpm. Its 9-pin
+diagnostic port carries SAE J1939 at 250 kbit/s (ELM327 protocol A), not
+OBD-II, so there are no Mode 01 readings: listen to the bus instead.
+
+ECUs, at standard J1939 source addresses:
+  00 Engine #1          EEC1 (100 Hz), CCVS and LFE (10 Hz), EFL/P1 (2 Hz),
+                        ET1, VEP1 and HOURS (1 Hz), and DM1 with two active
+                        faults, which needs a multi-packet BAM
+  03 Transmission #1    DM1 with no active faults (single frame)
+  17 Instrument cluster DD with fuel level (1 Hz)
+  21 Body controller    AMB with ambient temperature (1 Hz)
+  80 Crane controller   one proprietary message (PGN 65312); its layout is the
+                        crane maker's, so car-use counts it but does not decode it
+
+The engine reports coolant above normal (SPN 110 FMI 16) and oil pressure
+below normal (SPN 100 FMI 18) with the amber warning lamp on, and the live
+data agrees: coolant 104 degC, oil pressure about 150 kPa.
+
+HOURS is "on request" in J1939-71. Many engines broadcast it anyway (the FMS
+standard asks for 1 s); this one does, so a listen-only session sees it.
+This machine is made up from the public J1939-71/-73 definitions; it was not
+recorded from a real crane."""
+
+[car]
+name = "Illustrative truck-mounted crane, J1939 engine and body ECUs (sim)"
+vin = "1CARUSE09R0CRN001"
+protocol = "A"
+ignition_type = "compression"
+
+[adapter]
+profile = "stn"
+
+[[bus.j1939]]
+pgn = 61444          # EEC1
+source = 0x00
+priority = 3
+hz = 100
+[bus.j1939.spns]
+190 = { wave = "sine", min = 1150, max = 1250, period = 6 }   # engine speed, rpm
+
+[[bus.j1939]]
+pgn = 65265          # CCVS
+source = 0x00
+hz = 10
+[bus.j1939.spns]
+84 = 0               # wheel-based vehicle speed: parked
+
+[[bus.j1939]]
+pgn = 65266          # LFE
+source = 0x00
+hz = 10
+[bus.j1939.spns]
+183 = { value = 14.2, jitter = 0.6 }   # fuel rate, L/h
+
+[[bus.j1939]]
+pgn = 65263          # EFL/P1
+source = 0x00
+hz = 2
+[bus.j1939.spns]
+100 = { value = 152, jitter = 4 }      # oil pressure, kPa
+
+[[bus.j1939]]
+pgn = 65262          # ET1
+source = 0x00
+hz = 1
+[bus.j1939.spns]
+110 = 104            # coolant, degC
+
+[[bus.j1939]]
+pgn = 65271          # VEP1
+source = 0x00
+hz = 1
+[bus.j1939.spns]
+168 = { value = 27.8, jitter = 0.05 }  # battery potential, V (24 V system)
+
+[[bus.j1939]]
+pgn = 65253          # HOURS
+source = 0x00
+hz = 1
+[bus.j1939.spns]
+247 = 6412.35        # engine total hours
+
+[[bus.j1939]]
+pgn = 65276          # DD
+source = 0x17
+hz = 1
+[bus.j1939.spns]
+96 = 58.4            # fuel level, %
+
+[[bus.j1939]]
+pgn = 65269          # AMB
+source = 0x21
+hz = 1
+[bus.j1939.spns]
+171 = { value = 31.5, jitter = 0.1 }   # ambient air, degC
+
+[[bus.dm1]]
+source = 0x00
+hz = 1
+gap_ms = 50
+lamps = { amber_warning = "on" }
+faults = [
+  { spn = 110, fmi = 16, oc = 2 },
+  { spn = 100, fmi = 18, oc = 1 },
+]
+
+[[bus.dm1]]
+source = 0x03
+hz = 1
+
+[[bus.frames]]
+id = "18FF2080"      # proprietary B (PGN 65312) from the crane controller
+hz = 10
+data = "0000FFFFFFFFFFFF"
+counter = 0

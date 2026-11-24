@@ -67,6 +67,7 @@ class Recorder:
         if self.j1939:
             from .can.j1939 import Decoder as J1939Decoder
             self.decoder = J1939Decoder()     # the whole bus: J1939 data is spread over many PGNs
+            can = True
         elif decode:
             from .can.library import Decoder
             try:
