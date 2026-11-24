@@ -160,7 +160,8 @@ def run(elm, vehicle=None, seconds: float = 5.0, find: list[str] | None = None,
     out: dict = {"ts": time.time(), "adapter": {"identity": info.identity, "stn": info.stn},
                  "protocol": info.protocol, "protocol_number": info.protocol_number,
                  "simulated": vehicle is not None and getattr(vehicle, "scenario", None) is not None}
-    listen_only = bool(getattr(vehicle, "listen_only", False) or getattr(elm, "listen_only", False))
+    listen_only = bool(getattr(vehicle, "listen_only", None) or getattr(elm, "listen_only", False))
+    out["listen_only"] = (getattr(vehicle, "listen_only", None) or {"on": listen_only})
     # Asking the engine for rpm is an OBD request; in listen-only mode it is skipped.
     out["engine_running"] = None if listen_only or info.is_j1939 else _engine_running(vehicle)
     say(f"Listening for {seconds:g} s. car-use sends nothing to the car while it listens.")
@@ -325,6 +326,12 @@ def render(result: dict) -> str:
     """Plain text for the person."""
     lst = result.get("listen") or {}
     lines = [f"verdict: {result['verdict']}", f"  {result['why']}"]
+    lo = result.get("listen_only") or {}
+    if lo.get("on"):
+        how = ("the adapter confirmed silent monitoring (" + ", ".join(lo["adapter_commands"]) + ")"
+               if lo.get("adapter_silent") else "enforced by car-use only; the adapter did not confirm "
+               "silent monitoring" if "adapter_silent" in lo else "enforced by car-use")
+        lines.append(f"mode: listen-only, nothing was sent to the bus; {how}.")
     if lst.get("frames"):
         rate = f", about {lst['frames_per_s']} frames/s heard" if lst.get("frames_per_s") else ""
         lines.append(f"  heard {lst['frames']} frames from {len(lst.get('ids') or {})} ids"

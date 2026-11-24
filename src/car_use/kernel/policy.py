@@ -111,8 +111,16 @@ def enabled_tiers(vin: str) -> set[str]:
     return {"T0"} | tiers
 
 
+def listen_only_default() -> bool:
+    """Raw CAN sessions (can-check, record without --pids) are listen-only
+    unless the owner sets `[can] listen_only = false` in policy.toml."""
+    return bool(load_policy().get("can", {}).get("listen_only", True))
+
+
 def _write_policy(pol: dict) -> None:
     lines = []
+    if "listen_only" in pol.get("can", {}):
+        lines += ["[can]", f"listen_only = {'true' if pol['can']['listen_only'] else 'false'}", ""]
     for vin, conf in sorted(pol.get("vehicles", {}).items()):
         tiers = ", ".join(f'"{t}"' for t in sorted(conf.get("tiers", [])))
         lines += [f'[vehicles."{vin}"]', f"tiers = [{tiers}]", ""]
@@ -258,3 +266,16 @@ class Kernel:
 
     def record(self, kind: str, **fields) -> str:
         return self.audit.append(kind, **fields)
+
+    def session(self, intent: str, vehicle) -> str:
+        """Log which mode a CAN session used: listen-only (nothing transmitted,
+        with what the adapter confirmed) or OBD requests (read-only)."""
+        lo = getattr(vehicle, "listen_only", None)
+        info = vehicle.elm.info
+        return self.audit.append(
+            "session", intent=intent, vin=vehicle.vin or "unknown",
+            mode="listen-only" if lo else "obd-requests",
+            adapter_silent=(lo or {}).get("adapter_silent"),
+            adapter_commands=(lo or {}).get("adapter_commands"),
+            protocol=info.protocol_number, adapter=info.identity,
+            simulated=getattr(vehicle, "scenario", None) is not None)

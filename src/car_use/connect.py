@@ -21,9 +21,12 @@ def resolve_device(device: str | None) -> str:
     return dev
 
 
-def open_vehicle(device: str | None = None, kernel=None, protocol: str | None = None) -> ObdVehicle:
+def open_vehicle(device: str | None = None, kernel=None, protocol: str | None = None,
+                 listen_only: bool = False) -> ObdVehicle:
     """Connect. ``protocol`` (or the `protocol` setting) skips the auto search;
-    "A" is SAE J1939 for trucks and machines, which auto search never finds."""
+    "A" is SAE J1939 for trucks and machines, which auto search never finds.
+    ``listen_only`` connects without transmitting anything on the bus and
+    refuses every command that would (see ObdVehicle.connect)."""
     dev = resolve_device(device)
     emu = None
     scenario = None
@@ -35,14 +38,15 @@ def open_vehicle(device: str | None = None, kernel=None, protocol: str | None = 
         emu = Emulator(scenario).start()
         url = emu.url
     protocol = protocol or config.get("protocol") or None
-    if protocol is None and scenario is not None and scenario.protocol.upper() == "A":
-        # A virtual J1939 machine: play the person who set protocol A for it.
-        protocol = "A"
+    if protocol is None and scenario is not None and (listen_only or scenario.protocol.upper() == "A"):
+        # The simulator plays the person who knows the bus: protocol A for a
+        # J1939 machine, or, when car-use may not search, the car's own protocol.
+        protocol = scenario.protocol
     elm = Elm327(open_transport(url))
     v = ObdVehicle(elm, dev, kernel=kernel, scenario=scenario)
     v._emulator = emu   # keep alive for the vehicle's lifetime
     try:
-        return v.connect(protocol=protocol)
+        return v.connect(protocol=protocol, listen_only=listen_only)
     except BaseException:
         elm.close()
         if emu is not None:

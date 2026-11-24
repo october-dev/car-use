@@ -67,9 +67,9 @@ def _jsonable(obj):
     return str(obj)
 
 
-def run_script(code: str, device: str | None) -> int:
+def run_script(code: str, device: str | None, listen_only: bool = False) -> int:
     from . import helpers
-    helpers._configure(device)
+    helpers._configure(device, listen_only=listen_only)
     ns = {"__name__": "__car_use__", "json": json}
     import math, time   # noqa: E401  (convenience for scripts)
     ns.update(math=math, time=time)
@@ -417,14 +417,20 @@ def cmd_can_check(args) -> int:
     for value, name in ((args.seconds, "--seconds"), (args.action_seconds, "--action-seconds")):
         if not _positive(value, name):
             return 2
+    from .kernel.policy import Kernel, listen_only_default
+    listen_only = listen_only_default() if args.listen_only is None else args.listen_only
     try:
-        v = open_vehicle(_device(args), protocol=_protocol(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:
+        print(f"can-check: {e}", file=sys.stderr)
+        return 2
     except (TransportError, ElmError, OSError) as e:
         print(f"cannot connect: {e}", file=sys.stderr)
         return 1
+    Kernel().session("can-check", v)
     emu = getattr(v, "_emulator", None)
     act = emu.car.act if emu is not None else None
     if find:
@@ -472,14 +478,25 @@ def cmd_record(args) -> int:
         return 2
     pids = [x.strip() for x in args.pids.split(",") if x.strip()] if args.pids else None
     can_ids = [x.strip() for x in args.can_ids.split(",") if x.strip()] if args.can_ids else None
+    from .kernel.policy import Kernel, listen_only_default
+    if args.listen_only and pids:
+        print("record: --pids sends OBD requests, which --listen-only refuses. Choose one.",
+              file=sys.stderr)
+        return 2
+    # Raw CAN only (no --pids) is listen-only unless the policy or --no-listen-only says not.
+    listen_only = (listen_only_default() and not pids) if args.listen_only is None else args.listen_only
     try:
-        v = open_vehicle(_device(args), protocol=_protocol(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:
+        print(f"record: {e}", file=sys.stderr)
+        return 2
     except (TransportError, ElmError, OSError) as e:
         print(f"cannot connect: {e}", file=sys.stderr)
         return 1
+    Kernel().session("record", v)
     try:
         rec = Recorder(v, out_dir=args.out, pids=pids, can=args.can, can_ids=can_ids,
                        label=args.label or "", say=_stderr, decode=args.decode)
@@ -489,7 +506,8 @@ def cmd_record(args) -> int:
         if rec.can:
             what.append("CAN " + (",".join(rec.can_ids) if rec.can_ids else "all ids"))
         until = f"for {seconds:g} s" if seconds else "until Ctrl-C or the ignition goes off"
-        _stderr(f"recording {' + '.join(what)} {until} into {rec.out}")
+        mode = ", listen-only" if rec.listen_only else ""
+        _stderr(f"recording {' + '.join(what)} {until}{mode} into {rec.out}")
         meta = rec.run(seconds=seconds)
     except (RecordError, ValueError) as e:
         print(f"record: {e}", file=sys.stderr)
@@ -602,6 +620,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="car-use", add_help=False)
     p.add_argument("--sim")
     p.add_argument("--device")
+    p.add_argument("--listen-only", action="store_true",
+                   help="scripts: transmit nothing on the bus; requests are refused")
     p.add_argument("--version", "-V", action="store_true")
     p.add_argument("--help", "-h", action="store_true")
     sub = p.add_subparsers(dest="cmd")
@@ -646,6 +666,8 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("can-check")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
+                    help="transmit nothing on the bus (default on for raw CAN; see policy)")
     sp.add_argument("--j1939", action="store_true",
                     help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
     sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
@@ -660,6 +682,8 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("record")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
+                    help="transmit nothing on the bus (default on for raw CAN; see policy)")
     sp.add_argument("--j1939", action="store_true",
                     help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
     sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
@@ -760,7 +784,7 @@ def main(argv: list[str] | None = None) -> int:
     if sys.stdin.isatty():
         print(USAGE)
         return 0
-    return run_script(sys.stdin.read(), _device(args))
+    return run_script(sys.stdin.read(), _device(args), listen_only=args.listen_only)
 
 
 if __name__ == "__main__":

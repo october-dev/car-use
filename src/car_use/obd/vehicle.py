@@ -69,9 +69,10 @@ class ObdVehicle:
         self._supported: set[int] | None = None
         self._multi_ok: bool | None = None
         self._pack_cache: list | None = None
+        self.listen_only: dict | None = None    # set by connect(listen_only=True)
 
     # -- connect ---------------------------------------------------------------
-    def connect(self, protocol: str | None = None) -> "ObdVehicle":
+    def connect(self, protocol: str | None = None, listen_only: bool = False) -> "ObdVehicle":
         """Initialise the adapter and find the protocol, then read the VIN.
 
         ``protocol`` (an ELM327 protocol number) skips the auto search. "A"
@@ -80,6 +81,8 @@ class ObdVehicle:
         asked; the bus is only listened to.
         """
         proto = (protocol or "").strip().upper()
+        if listen_only:
+            return self._connect_listen_only(proto or "6")
         if not proto or proto == "0":
             self.elm.initialize()
             self.elm.detect_protocol()
@@ -97,12 +100,31 @@ class ObdVehicle:
             self.vin = ""
         return self
 
+    def _connect_listen_only(self, proto: str) -> "ObdVehicle":
+        """Connect without putting anything on the bus.
+
+        No auto search and no VIN request (both are OBD requests): the
+        protocol is set by number, and every later command that could
+        transmit is refused by the adapter wrapper.
+        """
+        if proto == "0":
+            raise ValueError("listen-only needs a protocol number: auto search sends OBD "
+                             "requests. Use --protocol 6 (CAN 500k, most cars) or --j1939.")
+        self.elm.listen_only = True
+        self.elm.initialize(proto)
+        self.elm.info.protocol_number = self.elm.at("ATDPN")
+        self.elm.info.protocol = self.elm.at("ATDP")
+        self.listen_only = self.elm.enter_listen_only()
+        return self
+
     def describe(self) -> dict:
         info = self.elm.info
         d = {"vin": self.vin or "unknown", "adapter": info.identity, "protocol": info.protocol,
              "device": self.device_url}
         if info.stn:
             d["stn"] = info.stn
+        if self.listen_only:
+            d["listen_only"] = True
         if self.scenario is not None:
             d["simulated"] = self.scenario.title
         return d

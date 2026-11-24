@@ -11,7 +11,7 @@ import time
 from . import connect as _connect
 from .obd import pids as _pids
 
-_state: dict = {"vehicle": None, "device": None}
+_state: dict = {"vehicle": None, "device": None, "listen_only": False}
 
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
            "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
@@ -19,14 +19,16 @@ __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "
            "listen", "can_layout", "decode", "j1939", "control", "Series"]
 
 
-def _configure(device: str | None) -> None:
+def _configure(device: str | None, listen_only: bool = False) -> None:
     _state["device"] = device
+    _state["listen_only"] = listen_only
 
 
 def car():
     """The connected vehicle (connects on first use). car().describe() for a summary."""
     if _state["vehicle"] is None:
-        _state["vehicle"] = _connect.open_vehicle(_state["device"], kernel=_state.get("kernel"))
+        _state["vehicle"] = _connect.open_vehicle(_state["device"], kernel=_state.get("kernel"),
+                                                  listen_only=_state.get("listen_only", False))
     return _state["vehicle"]
 
 
@@ -273,6 +275,9 @@ def control(device: str | None = None, max_kph: float | None = None):
     driver disarms the session.
     """
     from .control import open_session
+    if _state.get("listen_only") or getattr(_state.get("vehicle"), "listen_only", None):
+        raise PermissionError("This session is listen-only: motion control transmits, so it "
+                              "is refused. Start a session without --listen-only.")
     if device is None and str(_state.get("device") or "").startswith("sim"):
         device = "sim"
     return open_session(device, kernel=_state.get("kernel"), max_kph=max_kph)

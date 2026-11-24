@@ -91,6 +91,10 @@ class Recorder:
             raise RecordError("This car does not use CAN on the OBD port (protocol "
                               f"{self.elm.info.protocol or 'unknown'}), so there is nothing to "
                               "listen to. Record OBD readings without --can.")
+        self.listen_only = getattr(vehicle, "listen_only", None)
+        if self.listen_only and pids:
+            raise RecordError("OBD readings (--pids) are requests, and this session is "
+                              "listen-only. Record CAN only, or use --no-listen-only.")
         self.pids = self._choose_pids(pids, explicit=pids is not None)
         if not self.pids and not self.can:
             raise RecordError("None of the chosen OBD signals answer on this car.")
@@ -133,6 +137,8 @@ class Recorder:
                         "manufacturer": decoded.get("manufacturer"),
                         "protocol": info.protocol},
             "adapter": {"identity": info.identity, "stn": info.stn},
+            "mode": "listen-only" if self.listen_only else "obd-requests",
+            "listen_only": self.listen_only or None,
             "clock": CLOCK_NOTE,
             "obd": ({"file": "obd.csv", "signals": self.pids, "units": units}
                     if self.pids else None),
