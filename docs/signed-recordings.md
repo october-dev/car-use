@@ -13,11 +13,11 @@ Try it on the virtual crane: `car-use record --sim crane-j1939 --decode j1939 --
 
 ## What it proves, and what it doesn't
 
-It proves that the files in the folder are the ones the key signed, and that they haven't changed since. Every chunk was hashed within about a second of being written, so editing a file afterwards breaks the chain.
+It proves that the files in the folder are the ones the key signed, and that they haven't changed since. Any edit after signing changes a file's SHA-256 in the signed manifest. The chunk chain, hashed about once a second while recording, also names which chunk changed. The chain itself is only signed at the end, so it shows edits made after the recording, not by someone with access to the folder during it.
 
 It does not prove the data was true. A tampered adapter, a wrong clock or a machine sending bad values would all be signed faithfully. It also only proves which **key** signed, not which person or machine.
 
-**This is a software key.** It is a file on this computer (`~/.car-use/keys/device_ed25519.key`, permissions 0600). Anything that can read that file can sign as this device: another program running as you, a backup, a stolen laptop. car-use refuses to use the key if other users can read it, but that is the extent of the protection. Keeping the key in a secure element on a car-use device, where it can't be copied out, is future work. Until then, treat a signature as "this recording came from this install of car-use and hasn't been edited since", not as evidence that would stand up against a determined forger.
+**This is a software key.** It is a file on this computer (`~/.car-use/keys/device_ed25519.key`, permissions 0600). Anything that can read that file can sign as this device: another program running as you, a backup, a stolen laptop. car-use refuses to use the key if other users can read it (on macOS and Linux; Windows has no such file modes, so there the user profile's permissions are the protection), but that is the extent of the protection. `car-use dbc decode` refuses a signed folder, since decoding rewrites files the signature covers; decode a copy. Keeping the key in a secure element on a car-use device, where it can't be copied out, is future work. Until then, treat a signature as "this recording came from this install of car-use and hasn't been edited since", not as evidence that would stand up against a determined forger.
 
 ## What's in the folder
 

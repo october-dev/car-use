@@ -97,10 +97,10 @@ def test_record_decode_j1939_against_the_crane(sim, tmp_path):
 
 
 def test_cli_against_the_crane(tmp_path, capsys):
-    assert main(["can-check", "--sim", "crane-j1939", "--seconds", "1.5"]) == 0
+    assert main(["can-check", "--sim", "crane-j1939", "--seconds", "2.5"]) == 0
     out = capsys.readouterr().out
     assert "bus: J1939" in out and "engine_speed_rpm" in out
-    assert main(["record", "--sim", "crane-j1939", "--decode", "j1939", "--seconds", "1.5",
+    assert main(["record", "--sim", "crane-j1939", "--decode", "j1939", "--seconds", "2.5",
                  "--out", str(tmp_path / "r")]) == 0
     assert (tmp_path / "r" / "faults.csv").exists()
     capsys.readouterr()

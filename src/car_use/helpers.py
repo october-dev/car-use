@@ -247,14 +247,17 @@ def j1939(seconds: float = 5.0, capture=None) -> dict:
     """Listen to a J1939 bus (trucks, buses, cranes, construction and farm
     machines, generator sets) and decode its standard signals and active faults.
 
-    Sends nothing. Pass a listen() capture to decode that instead. Returns
+    Listening sends nothing. If this is the session's first connection and it
+    is neither listen-only nor on protocol A, connecting first runs the usual
+    protocol search and VIN request. Pass a listen() capture to decode that instead. Returns
     {"j1939": bool, "why", "signals": {key: {value, unit, spn, pgn, name,
     source}}, "dm1": {source: {lamps, faults}}, "faults": [...], "pgns",
     "transport"}. A value of None means the machine sent "not available" or
     "error" for it. Keys: engine_speed_rpm, coolant_temp_c, oil_pressure_kpa,
     engine_hours_h, fuel_level_pct, fuel_rate_lph, vehicle_speed_kph,
-    battery_v, ambient_temp_c. On a real machine connect with protocol A
-    (`car-use config set protocol A`); the simulator's crane-j1939 does it.
+    battery_v, ambient_temp_c. On a real machine connect with protocol A for
+    this run (`CAR_USE_PROTOCOL=A car-use --listen-only`); the simulator's
+    crane-j1939 does it.
     """
     from .can import j1939 as _j
     if capture is None:

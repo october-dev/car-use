@@ -128,7 +128,7 @@ def test_decoder_applies_sign_bits_and_lamp_values():
 
 def test_can_check_names_the_hyundai_layout_and_its_signals(sim):
     v = sim("hyundai-bus")
-    result = port.run(v.elm, v, seconds=0.5, find=["steering", "brake"], still_seconds=0.6,
+    result = port.run(v.elm, v, seconds=0.5, find=["steering", "brake"], still_seconds=1.5,
                       action_seconds=1.2, ready_seconds=0, act=v._emulator.car.act)
     assert result["layout"][0]["dbc"] == "hyundai_can_generated"
     steering = result["found"]["steering"]["candidates"][0]

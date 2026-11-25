@@ -53,6 +53,9 @@ def _stats(frames: list[Frame]) -> dict[str, dict]:
     return out
 
 
+STEADY_FRAMES = 8
+
+
 def find_changes(still: Capture, action: Capture, kind: str = "continuous",
                  top: int = 3) -> list[dict]:
     """Bytes that moved during the action but held steady while still.
@@ -101,6 +104,11 @@ def find_changes(still: Capture, action: Capture, kind: str = "continuous",
                     (5 if len(values) <= 3 else 0)
             if not trusted:
                 score /= 4
+            else:
+                # "Steady while still" from a handful of frames is weak evidence: a
+                # slow, noisy gauge can happen to hold for three frames. Full weight
+                # from STEADY_FRAMES frames heard while still.
+                score *= min(1.0, s["samples"] / STEADY_FRAMES)
             cands.append({
                 "id": ident,
                 "bytes": [lo, hi] if hi > lo else [lo],

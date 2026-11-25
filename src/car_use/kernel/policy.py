@@ -111,10 +111,17 @@ def enabled_tiers(vin: str) -> set[str]:
     return {"T0"} | tiers
 
 
-def listen_only_default() -> bool:
-    """Raw CAN sessions (can-check, record without --pids) are listen-only
-    unless the owner sets `[can] listen_only = false` in policy.toml."""
-    return bool(load_policy().get("can", {}).get("listen_only", True))
+def listen_only_default(protocol: str | None = None) -> bool:
+    """Whether a raw CAN session (can-check, record of the CAN bus) is listen-only.
+
+    `[can] listen_only = true|false` in policy.toml decides for every session.
+    Unset, J1939 sessions (protocol A: trucks and machines) are listen-only and
+    car sessions are not, so can-check on a car can still search the protocol
+    and read the VIN."""
+    can = load_policy().get("can", {})
+    if "listen_only" in can:
+        return bool(can["listen_only"])
+    return (protocol or "").strip().upper() == "A"
 
 
 def _write_policy(pol: dict) -> None:

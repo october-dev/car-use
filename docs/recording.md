@@ -40,7 +40,7 @@ It depends on the adapter. `meta.json` reports what you actually got.
 
 ## Listen-only, J1939 and signing
 
-- Recording CAN without `--pids` is listen-only by default: car-use sends nothing to the car. What that means and which adapters enforce it: [port-check.md](port-check.md#listen-only-mode).
+- Recording a J1939 machine is listen-only by default, and a car recording of the CAN bus is with `--listen-only`: car-use then sends nothing to the vehicle. What that means and which adapters enforce it: [port-check.md](port-check.md#listen-only-mode).
 - `--decode j1939` decodes trucks and machines: see [j1939.md](j1939.md).
 - `--sign` hash-chains the files as they're written and signs a manifest, so `car-use verify` can tell later whether anything changed: see [signed-recordings.md](signed-recordings.md).
 

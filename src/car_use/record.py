@@ -82,6 +82,8 @@ class Recorder:
                 # Listen only to the messages the signals live on, so even a slow
                 # adapter keeps up with them.
                 can_ids = self.decoder.ids()
+        if self.elm.info.is_j1939 and pids is None:
+            can = True                        # J1939 machines answer no OBD requests
         self.can = bool(can or can_ids)
         self.can_ids = [validate_id(i) for i in can_ids] if can_ids else []
         self.label = label
@@ -104,6 +106,9 @@ class Recorder:
         if self.listen_only and pids:
             raise RecordError("OBD readings (--pids) are requests, and this session is "
                               "listen-only. Record CAN only, or use --no-listen-only.")
+        if self.listen_only and not self.can:
+            raise RecordError("listen-only records the CAN bus only: add --can, --can-ids or "
+                              "--decode, or use --no-listen-only for OBD readings.")
         self.pids = self._choose_pids(pids, explicit=pids is not None)
         if not self.pids and not self.can:
             raise RecordError("None of the chosen OBD signals answer on this car.")
@@ -311,6 +316,9 @@ def decode_folder(folder: Path | str, dbc: str) -> dict:
     src = folder / "can.csv"
     if not src.exists():
         raise RecordError(f"{src} not found: record with --can first.")
+    if (folder / "manifest.json").exists():
+        raise RecordError(f"{folder} is a signed recording; decoding rewrites its files and "
+                          "would break the signature. Copy the folder and decode the copy.")
     if dbc == "j1939":
         from .can.j1939 import Decoder as J1939Decoder, FAULT_COLUMNS
         dec = J1939Decoder()

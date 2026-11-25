@@ -227,7 +227,10 @@ class Elm327:
                                    or "OBD" in ln.upper()), " ".join(ident))
         for c in ("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1"):
             self.at_ok(c)
-        self.at_ok(f"ATSP{protocol}")
+        # ATSP<n> saves n as the adapter's default in EEPROM (ELM327 datasheet,
+        # "SP h"), so a J1939 session would leave other OBD apps stuck on it.
+        # ATTP selects it for this session only; ATSP0 (automatic) is safe.
+        self.at_ok("ATSP0" if protocol == "0" else f"ATTP{protocol}")
         self.info.device = self.at("AT@1") if self.at_ok("AT@1") else ""
         sti = self.at("STI") if self.at_ok("STI") else None
         self.info.stn = sti

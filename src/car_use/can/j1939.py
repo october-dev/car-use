@@ -260,6 +260,15 @@ class Fault:
     conversion_method: int
 
     def to_dict(self) -> dict:
+        if self.conversion_method:
+            # Conversion method 1 is an older SPN byte order that J1939-73 deprecated
+            # and that is decoded here with the current layout, so the number may be
+            # wrong. Say so rather than name the wrong part.
+            return {"spn": self.spn, "fmi": self.fmi, "occurrences": self.occurrences,
+                    "spn_name": None, "fmi_text": FMI.get(self.fmi, "reserved"),
+                    "spn_uncertain": True,
+                    "text": f"SPN {self.spn} (uncertain: old conversion method), FMI {self.fmi}: "
+                            f"{FMI.get(self.fmi, 'reserved')}"}
         spn = BY_SPN.get(self.spn)
         return {"spn": self.spn, "fmi": self.fmi, "occurrences": self.occurrences,
                 "spn_name": spn.name if spn else None,

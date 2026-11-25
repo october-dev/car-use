@@ -112,18 +112,21 @@ def test_recorder_refuses_obd_in_listen_only(lo, tmp_path):
 
 
 def test_policy_default_and_owner_override():
-    assert listen_only_default() is True
+    assert listen_only_default() is False           # cars: protocol search and VIN still allowed
+    assert listen_only_default("A") is True         # J1939 machines: listen-only
     _write_policy({"can": {"listen_only": False}, "vehicles": {"VIN1": {"tiers": ["T1D"]}}})
-    assert listen_only_default() is False
+    assert listen_only_default("A") is False
+    _write_policy({"can": {"listen_only": True}, "vehicles": {"VIN1": {"tiers": ["T1D"]}}})
+    assert listen_only_default() is True
     assert load_policy()["vehicles"]["VIN1"]["tiers"] == ["T1D"]
 
 
 def test_cli_defaults_and_audit(tmp_path, capsys):
-    assert main(["can-check", "--sim", "open-bus", "--seconds", "0.3"]) == 0
+    assert main(["can-check", "--sim", "open-bus", "--seconds", "0.3", "--listen-only"]) == 0
     assert "mode: listen-only" in capsys.readouterr().out
-    assert main(["can-check", "--sim", "open-bus", "--seconds", "0.3", "--no-listen-only"]) == 0
+    assert main(["can-check", "--sim", "open-bus", "--seconds", "0.3"]) == 0
     assert "mode: listen-only" not in capsys.readouterr().out
-    assert main(["record", "--sim", "open-bus", "--can", "--seconds", "0.3",
+    assert main(["record", "--sim", "open-bus", "--can", "--seconds", "0.3", "--listen-only",
                  "--out", str(tmp_path / "a")]) == 0
     assert main(["record", "--sim", "healthy", "--pids", "rpm", "--seconds", "0.3",
                  "--out", str(tmp_path / "b")]) == 0
@@ -149,3 +152,30 @@ def test_scripts_with_listen_only_refuse_requests_and_control(capsys):
     assert "True" in out and "ListenOnlyError" in out and "control refused" in out
     assert helpers._state["listen_only"] is True
     helpers._configure(None)
+
+
+def test_plain_record_still_works_and_listen_only_needs_can(tmp_path, capsys):
+    # The README's first example: OBD readings, no CAN flags.
+    assert main(["record", "--sim", "healthy", "--seconds", "0.3",
+                 "--out", str(tmp_path / "plain")]) == 0
+    assert main(["record", "--sim", "healthy", "--listen-only", "--seconds", "0.3",
+                 "--out", str(tmp_path / "lo")]) == 2
+    assert "CAN bus only" in capsys.readouterr().err
+
+
+def test_j1939_defaults_to_listen_only(tmp_path, capsys):
+    assert main(["can-check", "--sim", "crane-j1939", "--seconds", "0.5"]) == 0
+    assert "mode: listen-only" in capsys.readouterr().out
+    assert main(["record", "--sim", "crane-j1939", "--seconds", "0.5",
+                 "--out", str(tmp_path / "crane")]) == 0
+    meta = json.loads((tmp_path / "crane" / "meta.json").read_text())
+    assert meta["mode"] == "listen-only" and meta["summary"]["can_frames"] > 0
+
+
+def test_fixed_protocol_does_not_rewrite_the_adapter_default(lo):
+    # ATSP<n> is saved in the adapter's EEPROM; a session must use ATTP<n>.
+    v = lo("crane-j1939")
+    sent, real = [], v.elm.at_ok
+    v.elm.at_ok = lambda c, *a, **k: (sent.append(c), real(c, *a, **k))[1]
+    v.elm.initialize("A")
+    assert "ATTPA" in sent and not [c for c in sent if c.startswith("ATSP")]

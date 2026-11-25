@@ -245,3 +245,11 @@ def test_protocol_a_is_can_and_j1939():
     assert AdapterInfo(protocol_number="A6").number == "6" and not AdapterInfo(protocol_number="A6").is_j1939
     assert not AdapterInfo(protocol_number="A3").is_can
     assert protocol_digit("") == ""
+
+
+def test_dm1_old_conversion_method_is_flagged_not_named():
+    from car_use.can.j1939 import decode_dm1
+    # SPN 110 (coolant temp), FMI 0, conversion method 1, occurrence 3.
+    payload = bytes([0x04, 0xFF, 110, 0x00, 0x00, 0x80 | 3, 0xFF, 0xFF])
+    f = decode_dm1(payload)["faults"][0]
+    assert f["spn_uncertain"] is True and f["spn_name"] is None and "uncertain" in f["text"]

@@ -2,6 +2,7 @@
 import json
 import os
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -148,3 +149,24 @@ def test_cli_sign_verify_key(tmp_path, capsys):
     _flip(out / "can.csv", 60)
     assert main(["verify", str(out), "--json"]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "tampered"
+
+
+def test_malformed_chain_entries_are_reported_not_crashed(signed):
+    from car_use import signing
+    folder = signed[0] if isinstance(signed, tuple) else signed
+    folder = Path(folder)
+    chain = folder / signing.CHAIN_FILE
+    lines = chain.read_text().splitlines()
+    lines[0] = json.dumps({"seq": 0, "file": "/etc/passwd"})
+    lines.insert(1, "[1, 2, 3]")
+    chain.write_text("\n".join(lines) + "\n")
+    result = signing.verify(folder)
+    assert result["status"] == "tampered"
+    assert any("unreadable" in p for p in result["problems"])
+
+
+def test_decoding_a_signed_folder_is_refused(signed):
+    from car_use.record import decode_folder, RecordError
+    folder = Path(signed[0] if isinstance(signed, tuple) else signed)
+    with pytest.raises(RecordError, match="signed"):
+        decode_folder(folder, "j1939")

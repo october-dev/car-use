@@ -97,7 +97,9 @@ def device_key(create: bool = True):
         with os.fdopen(fd, "w") as f:
             f.write(seed.hex() + "\n")
     mode = stat.S_IMODE(p.stat().st_mode)
-    if mode & 0o077:
+    # Windows reports every file as 0o666 (no POSIX modes), so the check cannot
+    # pass there; the user profile's ACL is what protects the key.
+    if os.name != "nt" and mode & 0o077:
         raise DeviceKeyError(f"{p} is readable by other users (mode {mode:o}). Anyone who can read "
                         f"it can sign as this device. Fix it with: chmod 600 {p}")
     try:
@@ -117,6 +119,12 @@ def fingerprint(public_key_hex: str) -> str:
 
 
 # -- chunk chain while recording --------------------------------------------------------
+
+def _plain_name(name) -> bool:
+    """A bare file name in the recording folder: no directories, no absolute path."""
+    return isinstance(name, str) and bool(name) and name not in (".", "..") and \
+        "/" not in name and "\\" not in name and Path(name).name == name
+
 
 def chunk_hash(prev: str, entry: dict) -> str:
     body = {k: entry[k] for k in ("seq", "file", "offset", "length", "sha256", "t_unix",
@@ -241,6 +249,9 @@ def verify(folder: Path | str, expect_key: str | None = None) -> dict:
         out["signed_by_this_device"] = None
     # every file
     for name, want in sorted(manifest.get("files", {}).items()):
+        if not _plain_name(name):
+            problems.append(f"manifest names {name!r}, which is not a file in this folder")
+            continue
         p = folder / name
         if not p.exists():
             problems.append(f"{name}: missing")
@@ -267,20 +278,29 @@ def verify(folder: Path | str, expect_key: str | None = None) -> dict:
                 problems.append(f"{CHAIN_FILE}: line {n + 1} is not valid JSON")
                 break
             n += 1
-            where = (f"{e.get('file')} chunk {e.get('seq')} (bytes {e.get('offset')}-"
-                     f"{(e.get('offset') or 0) + (e.get('length') or 0)}, "
-                     f"t_since_start {e.get('t_since_start')} s)")
-            if e.get("prev") != prev or chunk_hash(prev, e) != e.get("hash"):
-                problems.append(f"{CHAIN_FILE}: entry {n} broken ({where})")
+            try:
+                if not isinstance(e, dict) or not _plain_name(e["file"]):
+                    raise ValueError
+                offset, length = int(e["offset"]), int(e["length"])
+                if offset < 0 or length < 0:
+                    raise ValueError
+                where = (f"{e['file']} chunk {e.get('seq')} (bytes {offset}-{offset + length}, "
+                         f"t_since_start {e.get('t_since_start')} s)")
+                if e.get("prev") != prev or chunk_hash(prev, e) != e.get("hash"):
+                    problems.append(f"{CHAIN_FILE}: entry {n} broken ({where})")
+            except (KeyError, TypeError, ValueError, AttributeError):
+                problems.append(f"{CHAIN_FILE}: entry {n} unreadable")
+                prev = ""
+                continue
             prev = e.get("hash", "")
-            p = folder / str(e.get("file"))
+            p = folder / e["file"]
             if p.exists():
                 with p.open("rb") as f:
-                    f.seek(e["offset"])
-                    data = f.read(e["length"])
-                if len(data) != e["length"] or _sha256(data) != e["sha256"]:
+                    f.seek(offset)
+                    data = f.read(length)
+                if len(data) != length or _sha256(data) != e.get("sha256"):
                     problems.append(f"{where}: contents changed")
-            ends[e["file"]] = e["offset"] + e["length"]
+            ends[e["file"]] = offset + length
     if n != chain.get("chunks") or prev != chain.get("head"):
         problems.append(f"{CHAIN_FILE}: {n} chunks ending in {prev[:12]}, but the manifest "
                         f"signed {chain.get('chunks')} ending in {str(chain.get('head'))[:12]}")

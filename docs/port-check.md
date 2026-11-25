@@ -70,14 +70,14 @@ A gateway still passes diagnostic questions. Steering angle can often be read fr
 
 ## Listen-only mode
 
-`can-check` and `record` without `--pids` are **listen-only by default**. In a listen-only session car-use puts nothing on the bus:
+J1939 sessions (`--j1939` or protocol A) are **listen-only by default**. On a car, pass `--listen-only` (to `can-check`, or to `record --can`). In a listen-only session car-use puts nothing on the bus:
 
-- No automatic protocol search and no VIN request, because both are OBD requests. The protocol is set by number instead: 6 (CAN 11-bit, 500 kbit/s, most cars since 2008) unless you pass `--protocol`, `--j1939`, or set `car-use config set protocol ...`. With the default, a car on another speed sounds `hidden`. The simulator knows each virtual car's bus and uses it.
+- No automatic protocol search and no VIN request, because both are OBD requests. The protocol is set by number instead: 6 (CAN 11-bit, 500 kbit/s, most cars since 2008) unless you pass `--protocol` or `--j1939` (or `CAR_USE_PROTOCOL=...` for one run). With the default, a car on another speed sounds `hidden`. The simulator knows each virtual car's bus and uses it.
 - No rpm check, so `engine_running` is unknown. On a J1939 machine it comes from engine speed on the bus.
 - Every command that could make the adapter transmit is refused before it reaches the adapter: OBD requests, `raw_obd`, `clear_dtcs`, `control()`, `ATSP0`, `AT CSM0`, `STCMM 1`. car-use only lets through a short list of adapter commands that can't transmit (reset, formatting, protocol by number, filters, silent monitoring on, voltage).
 - The audit log records each session's mode (`car-use audit`): `listen-only` or `obd-requests`, and what the adapter confirmed.
 
-`--no-listen-only` brings back the old behaviour (auto search, VIN, rpm check). These are read requests, so they are still tier T0. `record --pids` sends OBD requests by nature, so it isn't listen-only unless you ask, and `--listen-only --pids` is refused. Scripts can run with `car-use --listen-only <<'PY'`. To change the default, the owner sets `[can] listen_only = false` in `~/.car-use/policy.toml`.
+Without it, a car session does the auto search, VIN and rpm check; `--no-listen-only` does the same on a J1939 session. These are read requests, so they are still tier T0. `record --pids` sends OBD requests by nature, so it isn't listen-only unless you ask, and `--listen-only --pids` is refused. Scripts can run with `car-use --listen-only <<'PY'`. To change the default for every session, the owner sets `[can] listen_only = true` (or `false`) in `~/.car-use/policy.toml`.
 
 ### What enforces it, honestly
 

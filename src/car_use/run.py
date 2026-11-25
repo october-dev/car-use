@@ -420,8 +420,8 @@ def cmd_can_check(args) -> int:
     for value, name in ((args.seconds, "--seconds"), (args.action_seconds, "--action-seconds")):
         if not _positive(value, name):
             return 2
-    from .kernel.policy import Kernel, listen_only_default
-    listen_only = listen_only_default() if args.listen_only is None else args.listen_only
+    from .kernel.policy import Kernel
+    listen_only = args.listen_only     # None: the policy default for the protocol
     try:
         v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
@@ -481,13 +481,14 @@ def cmd_record(args) -> int:
         return 2
     pids = [x.strip() for x in args.pids.split(",") if x.strip()] if args.pids else None
     can_ids = [x.strip() for x in args.can_ids.split(",") if x.strip()] if args.can_ids else None
-    from .kernel.policy import Kernel, listen_only_default
+    from .kernel.policy import Kernel
     if args.listen_only and pids:
         print("record: --pids sends OBD requests, which --listen-only refuses. Choose one.",
               file=sys.stderr)
         return 2
-    # Raw CAN only (no --pids) is listen-only unless the policy or --no-listen-only says not.
-    listen_only = (listen_only_default() and not pids) if args.listen_only is None else args.listen_only
+    # Without OBD readings the policy default applies (listen-only on J1939);
+    # OBD readings (--pids) have to send requests.
+    listen_only = (False if pids else None) if args.listen_only is None else args.listen_only
     try:
         v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
@@ -702,7 +703,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
     sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
-                    help="transmit nothing on the bus (default on for raw CAN; see policy)")
+                    help="transmit nothing on the bus (default on for J1939; see policy)")
     sp.add_argument("--j1939", action="store_true",
                     help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
     sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
@@ -718,7 +719,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
     sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
-                    help="transmit nothing on the bus (default on for raw CAN; see policy)")
+                    help="transmit nothing on the bus (default on for J1939; see policy)")
     sp.add_argument("--j1939", action="store_true",
                     help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
     sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")

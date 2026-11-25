@@ -263,7 +263,7 @@ car-use can only read your car unless you allow more. Steering, gas and brakes s
 - **Read-only to start.** It can look at your car's data but can't change anything. Coding, flashing and controlling parts are always refused.
 - **You stay in control.** Nothing changes unless you switch it on yourself, at your own computer, and say yes each time. Your agent can't do that for you.
 - **Motion control is opt-in, per car.** Only through a comma panda and opendbc's safety limits, only while you have cruise control engaged, and any touch of the brake, gas or wheel stops it.
-- **Listening sends nothing.** `can-check` and `record` of the CAN bus are listen-only by default: car-use refuses every command that could transmit. On today's adapters that is car-use's software, helped by the adapter's silent monitoring, not a hardware guarantee. [What enforces it](docs/port-check.md#listen-only-mode).
+- **Listening sends nothing.** Sessions on trucks and machines (J1939) are listen-only by default, and car sessions are with `--listen-only`: car-use then refuses every command that could transmit. On today's adapters that is car-use's software, helped by the adapter's silent monitoring, not a hardware guarantee. [What enforces it](docs/port-check.md#listen-only-mode).
 - **Everything is logged.** Every action goes into a log that can't be secretly edited. Check it with `car-use audit --verify`.
 - **Never allowed.** Turning off emissions systems, changing the odometer or messing with keys.
 
