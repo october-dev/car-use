@@ -16,6 +16,11 @@ Files in the recording folder:
              steering_angle_deg, steering_torque, brake_pressed, gas_pedal,
              left_blinker, right_blinker in real units, up to 50 rows a second.
              Each cell is the latest value heard; empty until first heard.
+             With --decode j1939 the columns are the standard J1939 SPNs
+             (engine_speed_rpm, coolant_temp_c, ... see can/j1939.py).
+  faults.csv   with --decode j1939: t_unix, t_since_start, source, the four
+             DM1 lamps, and the active faults, one row each time a source's
+             DM1 changes.
 
 One ELM327-class adapter can either ask OBD questions or listen, not both at
 once. With both --pids and --can, car-use alternates, which slows both.
@@ -53,12 +58,18 @@ def default_dir() -> Path:
 class Recorder:
     def __init__(self, vehicle, out_dir: Path | str | None = None, pids: list[str] | None = None,
                  can: bool = False, can_ids: list[str] | None = None, label: str = "",
-                 can_slice: float | None = None, say=None, decode: str | None = None):
+                 can_slice: float | None = None, say=None, decode: str | None = None,
+                 sign: bool = False, asset_id: str | None = None):
         self.v = vehicle
         self.elm = vehicle.elm
         self.out = Path(out_dir) if out_dir else default_dir()
         self.decoder = None
-        if decode:
+        self.j1939 = decode == "j1939"
+        if self.j1939:
+            from .can.j1939 import Decoder as J1939Decoder
+            self.decoder = J1939Decoder()     # the whole bus: J1939 data is spread over many PGNs
+            can = True
+        elif decode:
             from .can.library import Decoder
             try:
                 self.decoder = Decoder(decode)
@@ -71,6 +82,8 @@ class Recorder:
                 # Listen only to the messages the signals live on, so even a slow
                 # adapter keeps up with them.
                 can_ids = self.decoder.ids()
+        if self.elm.info.is_j1939 and pids is None:
+            can = True                        # J1939 machines answer no OBD requests
         self.can = bool(can or can_ids)
         self.can_ids = [validate_id(i) for i in can_ids] if can_ids else []
         self.label = label
@@ -81,6 +94,21 @@ class Recorder:
             raise RecordError("This car does not use CAN on the OBD port (protocol "
                               f"{self.elm.info.protocol or 'unknown'}), so there is nothing to "
                               "listen to. Record OBD readings without --can.")
+        self.sign = sign
+        self.asset_id = asset_id
+        if sign:
+            from . import signing
+            try:
+                signing.device_key()           # fail now, not after an hour of driving
+            except (signing.SigningUnavailable, signing.DeviceKeyError) as e:
+                raise RecordError(str(e)) from None
+        self.listen_only = getattr(vehicle, "listen_only", None)
+        if self.listen_only and pids:
+            raise RecordError("OBD readings (--pids) are requests, and this session is "
+                              "listen-only. Record CAN only, or use --no-listen-only.")
+        if self.listen_only and not self.can:
+            raise RecordError("listen-only records the CAN bus only: add --can, --can-ids or "
+                              "--decode, or use --no-listen-only for OBD readings.")
         self.pids = self._choose_pids(pids, explicit=pids is not None)
         if not self.pids and not self.can:
             raise RecordError("None of the chosen OBD signals answer on this car.")
@@ -123,14 +151,17 @@ class Recorder:
                         "manufacturer": decoded.get("manufacturer"),
                         "protocol": info.protocol},
             "adapter": {"identity": info.identity, "stn": info.stn},
+            "mode": "listen-only" if self.listen_only else "obd-requests",
+            "listen_only": self.listen_only or None,
             "clock": CLOCK_NOTE,
             "obd": ({"file": "obd.csv", "signals": self.pids, "units": units}
                     if self.pids else None),
             "can": ({"file": "can.csv", "ids_filter": self.can_ids or None} if self.can else None),
-            "decoded": ({"file": "signals.csv", "dbc": self.decoder.name,
-                         "source": "opendbc (MIT), bundled with car-use",
-                         "columns": SIGNAL_UNITS} if self.decoder else None),
+            "decoded": (_decoded_meta(self.decoder.name) if self.decoder else None),
             "skipped_signals": self._unsupported or None,
+            "signed": ({"manifest": "manifest.json", "signature": "manifest.sig",
+                        "chain": "chain.jsonl", "verify": "car-use verify <this folder>"}
+                       if self.sign else None),
         }
 
     def run(self, seconds: float | None = None, progress_every: float = 10.0) -> dict:
@@ -145,8 +176,14 @@ class Recorder:
         can_f = (self.out / "can.csv").open("w", newline="", encoding="utf-8") if self.can else None
         sig_f = (self.out / "signals.csv").open("w", newline="", encoding="utf-8") if self.decoder else None
         sig_w = csv.writer(sig_f) if sig_f else None
+        flt_f = (self.out / "faults.csv").open("w", newline="", encoding="utf-8") if self.j1939 else None
+        flt_w = csv.writer(flt_f) if flt_f else None
         if sig_w:
-            sig_w.writerow(["t_unix", "t_since_start", *SIGNAL_UNITS])
+            sig_w.writerow(["t_unix", "t_since_start", *columns_for(self.decoder.name)])
+        if flt_w:
+            from .can.j1939 import FAULT_COLUMNS
+            flt_w.writerow(["t_unix", "t_since_start", *FAULT_COLUMNS])
+        signer = None
         last_row = -1.0
         obd_w = csv.writer(obd_f) if obd_f else None
         can_w = csv.writer(can_f) if can_f else None
@@ -154,6 +191,14 @@ class Recorder:
             obd_w.writerow(["t_unix", "t_since_start", *self.pids])
         if can_w:
             can_w.writerow(["t_unix", "t_since_start", "burst", "id", "data"])
+        if self.sign:
+            from .signing import Signer
+            for fh in (obd_f, can_f, sig_f, flt_f):
+                if fh:
+                    fh.flush()
+            signer = Signer(self.out, [Path(fh.name).name for fh in (obd_f, can_f, sig_f, flt_f) if fh],
+                            asset={"vin": self.v.vin or None, "asset_id": self.asset_id,
+                                   "label": self.label or None})
         t0 = time.monotonic()
         rows = frames = bursts = buffer_full = 0
         ids: set[str] = set()
@@ -196,15 +241,17 @@ class Recorder:
                         can_w.writerow([f"{f.wall:.3f}", f"{f.mono - t0:.3f}", bursts, f.id,
                                         f.data.hex().upper()])
                         ids.add(f.id)
-                        if self.decoder and self.decoder.feed(f.id, f.data) is not None \
-                                and f.mono - last_row >= 0.02:
-                            last_row = f.mono
-                            sig_w.writerow([f"{f.wall:.3f}", f"{f.mono - t0:.3f}",
-                                            *[_cell(v) for v in self.decoder.row().values()]])
+                        if self.decoder:
+                            last_row = _write_decoded(self.decoder, f.id, f.data, f.mono,
+                                                      f"{f.wall:.3f}", f"{f.mono - t0:.3f}",
+                                                      last_row, sig_w, flt_w)
                     frames += len(got)
                     can_f.flush()
-                    if sig_f:
-                        sig_f.flush()
+                    for fh in (sig_f, flt_f):
+                        if fh:
+                            fh.flush()
+                if signer is not None:
+                    signer.checkpoint()
                 if time.monotonic() >= next_progress:
                     next_progress += progress_every
                     self.say(_progress(time.monotonic() - t0, rows, frames, len(ids)))
@@ -220,7 +267,7 @@ class Recorder:
                     listener.__exit__(None, None, None)
                 except (TransportError, ElmError):
                     pass
-            for fh in (obd_f, can_f, sig_f):
+            for fh in (obd_f, can_f, sig_f, flt_f):
                 if fh:
                     fh.close()
         elapsed = time.monotonic() - t0
@@ -237,7 +284,18 @@ class Recorder:
             "can_buffer_full": buffer_full if self.can else None,
             "decoded_frames": self.decoder.decoded if self.decoder else None,
         }
+        if self.j1939:
+            meta["summary"]["j1939"] = _j1939_summary(self.decoder)
         self._write_meta(meta)
+        if signer is not None:
+            manifest = signer.finish(extra_files=["meta.json"])
+            from .kernel.policy import Audit
+            Audit().append("recording_signed", folder=str(self.out), device=manifest["device"],
+                           chain_head=manifest["chain"]["head"], chunks=manifest["chain"]["chunks"],
+                           manifest_sha256=__import__("hashlib").sha256(
+                               (self.out / "manifest.json").read_bytes()).hexdigest())
+            meta["signed"] = {"device": manifest["device"], "chunks": manifest["chain"]["chunks"],
+                              "chain_head": manifest["chain"]["head"]}
         meta["folder"] = str(self.out)
         return meta
 
@@ -252,37 +310,102 @@ SIGNAL_UNITS = {"speed_kph": "km/h", "steering_angle_deg": "degrees, left positi
 
 
 def decode_folder(folder: Path | str, dbc: str) -> dict:
-    """Decode an earlier recording's can.csv into signals.csv with a DBC map."""
-    from .can.library import Decoder
+    """Decode an earlier recording's can.csv into signals.csv with a DBC map, or
+    with `dbc="j1939"` into J1939 signals.csv and faults.csv."""
     folder = Path(folder)
     src = folder / "can.csv"
     if not src.exists():
         raise RecordError(f"{src} not found: record with --can first.")
-    try:
-        dec = Decoder(dbc)
-    except KeyError as e:
-        raise RecordError(str(e.args[0])) from None
+    if (folder / "manifest.json").exists():
+        raise RecordError(f"{folder} is a signed recording; decoding rewrites its files and "
+                          "would break the signature. Copy the folder and decode the copy.")
+    if dbc == "j1939":
+        from .can.j1939 import Decoder as J1939Decoder, FAULT_COLUMNS
+        dec = J1939Decoder()
+    else:
+        from .can.library import Decoder
+        try:
+            dec = Decoder(dbc)
+        except KeyError as e:
+            raise RecordError(str(e.args[0])) from None
     rows = 0
     last = -1.0
-    with src.open(newline="", encoding="utf-8") as fin, \
-            (folder / "signals.csv").open("w", newline="", encoding="utf-8") as fout:
-        w = csv.writer(fout)
-        w.writerow(["t_unix", "t_since_start", *SIGNAL_UNITS])
-        for r in csv.DictReader(fin):
-            if dec.feed(r["id"], bytes.fromhex(r["data"])) is None:
-                continue
-            t = float(r["t_since_start"])
-            if t - last >= 0.02:
-                last = t
-                w.writerow([r["t_unix"], r["t_since_start"], *[_cell(v) for v in dec.row().values()]])
-                rows += 1
+    flt_f = (folder / "faults.csv").open("w", newline="", encoding="utf-8") if dbc == "j1939" else None
+    flt_w = csv.writer(flt_f) if flt_f else None
+    if flt_w:
+        flt_w.writerow(["t_unix", "t_since_start", *FAULT_COLUMNS])
+    try:
+        with src.open(newline="", encoding="utf-8") as fin, \
+                (folder / "signals.csv").open("w", newline="", encoding="utf-8") as fout:
+            w = csv.writer(fout)
+            w.writerow(["t_unix", "t_since_start", *columns_for(dbc)])
+            for r in csv.DictReader(fin):
+                t = float(r["t_since_start"])
+                before = last
+                last = _write_decoded(dec, r["id"], bytes.fromhex(r["data"]), t, r["t_unix"],
+                                      r["t_since_start"], last, w, flt_w)
+                rows += last != before
+    finally:
+        if flt_f:
+            flt_f.close()
     meta_p = folder / "meta.json"
     if meta_p.exists():
         meta = json.loads(meta_p.read_text(encoding="utf-8"))
-        meta["decoded"] = {"file": "signals.csv", "dbc": dbc, "source": "opendbc (MIT), bundled with car-use",
-                           "columns": SIGNAL_UNITS, "decoded_frames": dec.decoded}
+        meta["decoded"] = {**_decoded_meta(dbc), "decoded_frames": dec.decoded}
         meta_p.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
-    return {"folder": str(folder), "dbc": dbc, "rows": rows, "decoded_frames": dec.decoded}
+    out = {"folder": str(folder), "dbc": dbc, "rows": rows, "decoded_frames": dec.decoded}
+    if dbc == "j1939":
+        out["j1939"] = _j1939_summary(dec)
+    return out
+
+
+def columns_for(dbc: str) -> dict:
+    if dbc == "j1939":
+        from .can.j1939 import UNITS
+        return UNITS
+    return SIGNAL_UNITS
+
+
+def _decoded_meta(dbc: str) -> dict:
+    if dbc == "j1939":
+        from .can.j1939 import FAULT_COLUMNS
+        return {"file": "signals.csv", "dbc": "j1939",
+                "source": "SAE J1939-71 standard parameters, decoded by car-use",
+                "columns": columns_for(dbc), "faults_file": "faults.csv",
+                "faults_columns": FAULT_COLUMNS}
+    return {"file": "signals.csv", "dbc": dbc, "source": "opendbc (MIT), bundled with car-use",
+            "columns": SIGNAL_UNITS}
+
+
+def _write_decoded(dec, ident: str, data: bytes, t: float, t_unix: str, t_rel: str,
+                   last_row: float, sig_w, flt_w) -> float:
+    """Feed one frame; write a signals row (at most 50 a second) and, for J1939,
+    a faults row when a DM1 changes. Returns the time of the last signals row."""
+    if flt_w is None:
+        if dec.feed(ident, data) is not None and t - last_row >= 0.02:
+            sig_w.writerow([t_unix, t_rel, *[_cell(v) for v in dec.row().values()]])
+            return t
+        return last_row
+    got = dec.feed(ident, data, t)
+    if got is None:
+        return last_row
+    if "dm1" in got:
+        if got["changed"]:
+            from .can.j1939 import dm1_row
+            flt_w.writerow([t_unix, t_rel, *dm1_row(got["dm1"])])
+        return last_row
+    if t - last_row >= 0.02:
+        sig_w.writerow([t_unix, t_rel, *[_cell(v) for v in dec.row().values()]])
+        return t
+    return last_row
+
+
+def _j1939_summary(dec) -> dict:
+    snap = dec.snapshot()
+    return {"signals": {k: v["value"] for k, v in snap["signals"].items()},
+            "faults": [f["text"] + f" (source {f['source']:02X})" for f in snap["faults"]],
+            "dm1_changes": dec.dm1_changes, "transport": snap["transport"],
+            "pgns": snap["pgns"]}
 
 
 def _cell(value) -> str:

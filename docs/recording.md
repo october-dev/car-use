@@ -38,6 +38,12 @@ It depends on the adapter. `meta.json` reports what you actually got.
 2. **A sync mark.** Start each drive with one firm brake from walking pace. It shows in the video, as a drop in `speed`, and in the brake message if you recorded it. Line those up and the offset between the files is known.
 3. **Check it.** Plot `speed` against the dashcam's GPS speed for the first minute. They should overlap.
 
+## Listen-only, J1939 and signing
+
+- Recording a J1939 machine is listen-only by default, and a car recording of the CAN bus is with `--listen-only`: car-use then sends nothing to the vehicle. What that means and which adapters enforce it: [port-check.md](port-check.md#listen-only-mode).
+- `--decode j1939` decodes trucks and machines: see [j1939.md](j1939.md).
+- `--sign` hash-chains the files as they're written and signs a manifest, so `car-use verify` can tell later whether anything changed: see [signed-recordings.md](signed-recordings.md).
+
 ## Privacy and consent
 
 - `meta.json` keeps the WMI and model year, never the full VIN. `--label` is free text; don't put the VIN, a name or a number plate in it.

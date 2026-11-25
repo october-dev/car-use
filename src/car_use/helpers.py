@@ -11,22 +11,24 @@ import time
 from . import connect as _connect
 from .obd import pids as _pids
 
-_state: dict = {"vehicle": None, "device": None}
+_state: dict = {"vehicle": None, "device": None, "listen_only": False}
 
 __all__ = ["car", "manifest", "signals", "read", "read_many", "watch", "dtcs", "readiness",
            "ready_for_inspection", "freeze_frame", "vin_info", "raw_obd", "clear_dtcs",
            "dongle_doctor", "scenarios", "describe_dtc", "maker_info", "tune_ini", "engine_log",
-           "listen", "can_layout", "decode", "control", "Series"]
+           "listen", "can_layout", "decode", "j1939", "control", "Series"]
 
 
-def _configure(device: str | None) -> None:
+def _configure(device: str | None, listen_only: bool = False) -> None:
     _state["device"] = device
+    _state["listen_only"] = listen_only
 
 
 def car():
     """The connected vehicle (connects on first use). car().describe() for a summary."""
     if _state["vehicle"] is None:
-        _state["vehicle"] = _connect.open_vehicle(_state["device"], kernel=_state.get("kernel"))
+        _state["vehicle"] = _connect.open_vehicle(_state["device"], kernel=_state.get("kernel"),
+                                                  listen_only=_state.get("listen_only", False))
     return _state["vehicle"]
 
 
@@ -241,6 +243,29 @@ def decode(capture, dbc: str = "auto") -> list[dict]:
     return rows
 
 
+def j1939(seconds: float = 5.0, capture=None) -> dict:
+    """Listen to a J1939 bus (trucks, buses, cranes, construction and farm
+    machines, generator sets) and decode its standard signals and active faults.
+
+    Listening sends nothing. If this is the session's first connection and it
+    is neither listen-only nor on protocol A, connecting first runs the usual
+    protocol search and VIN request. Pass a listen() capture to decode that instead. Returns
+    {"j1939": bool, "why", "signals": {key: {value, unit, spn, pgn, name,
+    source}}, "dm1": {source: {lamps, faults}}, "faults": [...], "pgns",
+    "transport"}. A value of None means the machine sent "not available" or
+    "error" for it. Keys: engine_speed_rpm, coolant_temp_c, oil_pressure_kpa,
+    engine_hours_h, fuel_level_pct, fuel_rate_lph, vehicle_speed_kph,
+    battery_v, ambient_temp_c. On a real machine connect with protocol A for
+    this run (`CAR_USE_PROTOCOL=A car-use --listen-only`); the simulator's
+    crane-j1939 does it.
+    """
+    from .can import j1939 as _j
+    if capture is None:
+        capture = listen(seconds)
+    bus = _j.recognise(capture.ids())
+    return {**bus, **_j.decode_frames(capture.car_frames())}
+
+
 def control(device: str | None = None, max_kph: float | None = None):
     """Motion control (tier T4): steer, gas and brake through opendbc and a comma panda.
 
@@ -253,6 +278,9 @@ def control(device: str | None = None, max_kph: float | None = None):
     driver disarms the session.
     """
     from .control import open_session
+    if _state.get("listen_only") or getattr(_state.get("vehicle"), "listen_only", None):
+        raise PermissionError("This session is listen-only: motion control transmits, so it "
+                              "is refused. Start a session without --listen-only.")
     if device is None and str(_state.get("device") or "").startswith("sim"):
         device = "sim"
     return open_session(device, kernel=_state.get("kernel"), max_kph=max_kph)

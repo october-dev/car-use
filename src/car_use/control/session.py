@@ -192,7 +192,7 @@ class ControlSession:
         self.disarm("session closed")
         time.sleep(3 / RATE_HZ)
         self._stop.set()
-        self._thread.join(timeout=1)
+        self._thread.join(timeout=2)
         try:
             self.runner.close()
         finally:
@@ -232,6 +232,9 @@ class ControlSession:
                     time.sleep(delay)
                 else:
                     nxt = time.monotonic()
+            # Stopping: the last frame this loop sends is always "not enabled", even if
+            # a slow tick decided on an enabled command just before close() disarmed.
+            self.runner.write(Command())
         except BaseException as e:   # the car or adapter went away: never leave it half-commanded
             self._error = e
             with self._lock:

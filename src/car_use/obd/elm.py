@@ -91,6 +91,27 @@ def _split_can_id(line: str) -> tuple[str | None, str]:
     return None, line
 
 
+class ListenOnlyError(RuntimeError):
+    """A command that would put a frame on the bus, refused because the session is listen-only."""
+
+
+# Adapter commands that never put a frame on the bus: reset, formatting,
+# choosing a protocol by number (not auto search, which sends OBD requests),
+# reading the protocol or the battery voltage, receive filters, silent
+# monitoring on, and the STN identity and receive-only monitor mode. In a
+# listen-only session everything else is refused before it reaches the
+# adapter, including every OBD request, ATSP0, AT CSM0 and STCMM 1.
+_SILENT_COMMANDS = re.compile(
+    r"^(AT(Z|WS|D|I|@1|[ELSH][01]|AT[0-2]|[ST]PA?[1-9A-C]|DPN?|CAF[01]|CSM1|"
+    r"C[FM][0-9A-F]{3}|C[FM][0-9A-F]{8}|CRA[0-9A-F]*|AR|RV|JHF[01]|J[SE])"
+    r"|ST(I|DI|CMM0))$")
+
+
+def silent_command(cmd: str) -> bool:
+    """True if `cmd` cannot make the adapter transmit on the bus."""
+    return bool(_SILENT_COMMANDS.match(cmd.replace(" ", "").upper()))
+
+
 class ElmError(RuntimeError):
     def __init__(self, command: str, code: str, detail: str | None = None):
         self.command, self.code = command, code
@@ -117,10 +138,24 @@ class AdapterInfo:
     extra: dict = field(default_factory=dict)
 
     @property
+    def number(self) -> str:
+        """The protocol without the auto marker: ATDPN "A6" (found by auto search) is 6.
+        "A" alone is protocol A, SAE J1939, which auto search never picks."""
+        return protocol_digit(self.protocol_number)
+
+    @property
     def is_can(self) -> bool:
-        # ATDPN returns e.g. "A6" (auto, protocol 6); protocols 6-9 are ISO 15765 CAN.
-        n = self.protocol_number.lstrip("A")
-        return n in {"6", "7", "8", "9"}
+        # Protocols 6-9 are ISO 15765 CAN; A is SAE J1939 (29-bit, 250 kbit/s).
+        return self.number in {"6", "7", "8", "9", "A"}
+
+    @property
+    def is_j1939(self) -> bool:
+        return self.number == "A"
+
+
+def protocol_digit(number: str) -> str:
+    n = (number or "").strip().upper()
+    return n[1:] if len(n) == 2 and n[0] == "A" else n
 
 
 class Elm327:
@@ -131,10 +166,20 @@ class Elm327:
         self.info = AdapterInfo()
         self.log: list[tuple[float, str, str]] = []   # (seconds, cmd, reply) for tracing
         self._target_broken = False
+        # Listen-only: refuse every command that could put a frame on the bus.
+        # Set before initialize() so not even the protocol search transmits.
+        self.listen_only = False
+        self.refused: list[str] = []
 
     # -- raw I/O ----------------------------------------------------------------
     def command(self, cmd: str, timeout: float | None = None) -> list[str]:
         """Send one command, return non-empty reply lines (echo and noise removed)."""
+        if self.listen_only and not silent_command(cmd):
+            self.refused.append(cmd)
+            raise ListenOnlyError(
+                f"{cmd!r} refused: this session is listen-only, and that command could make "
+                "the adapter transmit on the bus. Reconnect without --listen-only for OBD "
+                "requests (reads only), or keep listening.")
         if self._target_broken:
             raise ElmError(cmd, "NOT RESTORED",
                            "adapter addressing unknown after a failed restore; "
@@ -182,7 +227,10 @@ class Elm327:
                                    or "OBD" in ln.upper()), " ".join(ident))
         for c in ("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1"):
             self.at_ok(c)
-        self.at_ok(f"ATSP{protocol}")
+        # ATSP<n> saves n as the adapter's default in EEPROM (ELM327 datasheet,
+        # "SP h"), so a J1939 session would leave other OBD apps stuck on it.
+        # ATTP selects it for this session only; ATSP0 (automatic) is safe.
+        self.at_ok("ATSP0" if protocol == "0" else f"ATTP{protocol}")
         self.info.device = self.at("AT@1") if self.at_ok("AT@1") else ""
         sti = self.at("STI") if self.at_ok("STI") else None
         self.info.stn = sti
@@ -190,7 +238,7 @@ class Elm327:
 
     def _timeout_for(self, timeout: float | None) -> float:
         chosen = self.timeout if timeout is None else timeout
-        number = self.info.protocol_number.lstrip("A")
+        number = self.info.number
         if number in {"1", "2", "3", "4", "5"}:
             return max(chosen, 10.0)
         return chosen
@@ -276,7 +324,7 @@ class Elm327:
         different number.
         """
         target = validate_header(header)
-        number = self.info.protocol_number.lstrip("A")
+        number = self.info.number
         if number not in ("6", "8"):
             raise ElmError(request, "NOT SUPPORTED",
                            f"physical addressing needs CAN protocol 6 or 8 "
@@ -333,6 +381,36 @@ class Elm327:
             raise ElmError(req, f"negative response 0x{payloads[0][2]:02X}"
                                 if len(payloads[0]) > 2 else "negative response")
         return payloads[0]
+
+    def enter_listen_only(self) -> dict:
+        """Ask the adapter not to acknowledge frames while it monitors.
+
+        ELM327 v1.4b and newer: AT CSM1 (silent monitoring, the default). STN
+        chips (OBDLink): STCMM 0, receive only. Both only govern monitoring:
+        the adapter can still transmit when asked, so car-use's refusal of
+        every other command is what keeps the session listen-only.
+        """
+        self.listen_only = True
+        silent = None
+        how = []
+        if self.info.stn and self.at_ok("STCMM0"):
+            how.append("STCMM0")
+        if self.at_ok("ATCSM1"):
+            how.append("ATCSM1")
+        if how:
+            silent = True
+        return {
+            "on": True,
+            "adapter_silent": silent,
+            "adapter_commands": how,
+            "software_block": True,
+            "note": (f"Adapter accepted {' and '.join(how)}: no acknowledgements while "
+                     "monitoring. It can still transmit if commanded; car-use refuses every "
+                     "command that would." if how else
+                     "Adapter rejected AT CSM1 (common on clones, many of which are always "
+                     "silent while monitoring, but car-use cannot confirm it). Only car-use's "
+                     "own refusal to send requests is enforced."),
+        }
 
     # -- listening ----------------------------------------------------------------
     def monitor(self, seconds: float) -> "MonitorBurst":

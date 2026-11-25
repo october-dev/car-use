@@ -29,10 +29,13 @@ Commands:
   car-use ecu ini FILE             summarise a TunerStudio .ini (tables, live channels)
   car-use ecu log FILE             summarise an .msl / .csv engine log
   car-use inspect [--sim S] [--expect-vin VIN] [--html FILE] [--md FILE]   used-car scan
-  car-use can-check [--find steering,brake,indicator] [--report] [--model TEXT]
+  car-use can-check [--find steering,brake,indicator] [--report] [--j1939] [--no-listen-only]
                                    does the OBD port carry the car's own CAN traffic?
-  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC] [--seconds N] [--out DIR]
+  car-use record [--pids a,b] [--can] [--can-ids 025,1A0] [--decode DBC|j1939] [--seconds N] [--out DIR]
                                    log OBD readings and CAN frames to CSV for a drive
+  car-use record ... --sign [--asset ID]   hash-chain and sign the recording (car-use[sign])
+  car-use verify FOLDER [--key HEX]  intact or tampered, and which file or chunk
+  car-use key                      this computer's signing key (public part)
   car-use dbc list|show NAME|decode FOLDER --dbc NAME
                                    CAN maps bundled from opendbc; decode a recording
   car-use control check|enable|disable|demo --sim
@@ -67,9 +70,9 @@ def _jsonable(obj):
     return str(obj)
 
 
-def run_script(code: str, device: str | None) -> int:
+def run_script(code: str, device: str | None, listen_only: bool = False) -> int:
     from . import helpers
-    helpers._configure(device)
+    helpers._configure(device, listen_only=listen_only)
     ns = {"__name__": "__car_use__", "json": json}
     import math, time   # noqa: E401  (convenience for scripts)
     ns.update(math=math, time=time)
@@ -232,7 +235,8 @@ def cmd_dbc(args) -> int:
         else:
             for r in rows:
                 print(f"{r['dbc']:<46} {r['car']}")
-            print("\nFrom opendbc (github.com/commaai/opendbc, MIT). "
+            print(f"{'j1939':<46} trucks, buses and machines: standard SAE J1939 parameters")
+            print("\nCar maps from opendbc (github.com/commaai/opendbc, MIT). "
                   "car-use can-check says which one fits a car.")
         return 0
     if not args.target:
@@ -385,6 +389,12 @@ def _stderr(text: str) -> None:
     print(f"[car-use] {text}", file=sys.stderr, flush=True)
 
 
+def _protocol(args) -> str | None:
+    if getattr(args, "j1939", False):
+        return "A"
+    return getattr(args, "protocol", None)
+
+
 def _positive(value, name: str) -> bool:
     import math
     if value is not None and (not math.isfinite(value) or value <= 0):
@@ -410,14 +420,20 @@ def cmd_can_check(args) -> int:
     for value, name in ((args.seconds, "--seconds"), (args.action_seconds, "--action-seconds")):
         if not _positive(value, name):
             return 2
+    from .kernel.policy import Kernel
+    listen_only = args.listen_only     # None: the policy default for the protocol
     try:
-        v = open_vehicle(_device(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:
+        print(f"can-check: {e}", file=sys.stderr)
+        return 2
     except (TransportError, ElmError, OSError) as e:
         print(f"cannot connect: {e}", file=sys.stderr)
         return 1
+    Kernel().session("can-check", v)
     emu = getattr(v, "_emulator", None)
     act = emu.car.act if emu is not None else None
     if find:
@@ -465,24 +481,38 @@ def cmd_record(args) -> int:
         return 2
     pids = [x.strip() for x in args.pids.split(",") if x.strip()] if args.pids else None
     can_ids = [x.strip() for x in args.can_ids.split(",") if x.strip()] if args.can_ids else None
+    from .kernel.policy import Kernel
+    if args.listen_only and pids:
+        print("record: --pids sends OBD requests, which --listen-only refuses. Choose one.",
+              file=sys.stderr)
+        return 2
+    # Without OBD readings the policy default applies (listen-only on J1939);
+    # OBD readings (--pids) have to send requests.
+    listen_only = (False if pids else None) if args.listen_only is None else args.listen_only
     try:
-        v = open_vehicle(_device(args))
+        v = open_vehicle(_device(args), protocol=_protocol(args), listen_only=listen_only)
     except NoDevice as e:
         print(f"no device: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:
+        print(f"record: {e}", file=sys.stderr)
+        return 2
     except (TransportError, ElmError, OSError) as e:
         print(f"cannot connect: {e}", file=sys.stderr)
         return 1
+    Kernel().session("record", v)
     try:
         rec = Recorder(v, out_dir=args.out, pids=pids, can=args.can, can_ids=can_ids,
-                       label=args.label or "", say=_stderr, decode=args.decode)
+                       label=args.label or "", say=_stderr, decode=args.decode,
+                       sign=args.sign, asset_id=args.asset)
         what = []
         if rec.pids:
             what.append("OBD " + ",".join(rec.pids))
         if rec.can:
             what.append("CAN " + (",".join(rec.can_ids) if rec.can_ids else "all ids"))
         until = f"for {seconds:g} s" if seconds else "until Ctrl-C or the ignition goes off"
-        _stderr(f"recording {' + '.join(what)} {until} into {rec.out}")
+        mode = ", listen-only" if rec.listen_only else ""
+        _stderr(f"recording {' + '.join(what)} {until}{mode} into {rec.out}")
         meta = rec.run(seconds=seconds)
     except (RecordError, ValueError) as e:
         print(f"record: {e}", file=sys.stderr)
@@ -495,8 +525,39 @@ def cmd_record(args) -> int:
         if getattr(v, "_emulator", None):
             v._emulator.stop()
     print(json.dumps({"folder": meta["folder"], "ended": meta["ended"],
-                      "error": meta.get("error"), "summary": meta["summary"]}, indent=2))
+                      "error": meta.get("error"), "summary": meta["summary"],
+                      **({"signed": meta["signed"]} if meta.get("signed") else {})}, indent=2))
     return 1 if meta.get("error") else 0
+
+
+def cmd_verify(args) -> int:
+    from . import signing
+    try:
+        result = signing.verify(args.folder, expect_key=args.key)
+    except signing.SigningUnavailable as e:
+        print(f"verify: {e}", file=sys.stderr)
+        return 2
+    except OSError as e:
+        print(f"verify: {e}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2) if args.json else signing.render(result), end="\n" if args.json else "")
+    return 0 if result["status"] == "intact" else 1
+
+
+def cmd_key(args) -> int:
+    from . import signing
+    try:
+        key = signing.device_key(create=False)
+    except signing.SigningUnavailable as e:
+        print(f"key: {e}", file=sys.stderr)
+        return 2
+    except signing.DeviceKeyError as e:
+        print(str(e))
+        return 1
+    pub = signing.public_hex(key)
+    print(f"device {signing.fingerprint(pub)}\npublic key {pub}\nfile {signing.key_path()}\n"
+          "This is a software key: anything that can read that file can sign as this device.")
+    return 0
 
 
 def cmd_audit(args) -> int:
@@ -595,6 +656,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="car-use", add_help=False)
     p.add_argument("--sim")
     p.add_argument("--device")
+    p.add_argument("--listen-only", action="store_true",
+                   help="scripts: transmit nothing on the bus; requests are refused")
     p.add_argument("--version", "-V", action="store_true")
     p.add_argument("--help", "-h", action="store_true")
     sub = p.add_subparsers(dest="cmd")
@@ -639,6 +702,11 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("can-check")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
+                    help="transmit nothing on the bus (default on for J1939; see policy)")
+    sp.add_argument("--j1939", action="store_true",
+                    help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
+    sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
     sp.add_argument("--seconds", type=float, default=5.0, help="how long to listen first")
     sp.add_argument("--find", help="steering,brake,indicator or all: guided steps, car parked")
     sp.add_argument("--action-seconds", type=float, default=10.0,
@@ -650,6 +718,11 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("record")
     sp.add_argument("--sim", default=argparse.SUPPRESS)
     sp.add_argument("--device", default=argparse.SUPPRESS)
+    sp.add_argument("--listen-only", action=argparse.BooleanOptionalAction, default=None,
+                    help="transmit nothing on the bus (default on for J1939; see policy)")
+    sp.add_argument("--j1939", action="store_true",
+                    help="a truck or machine: SAE J1939, 29-bit CAN at 250 kbit/s (protocol A)")
+    sp.add_argument("--protocol", help="ELM327 protocol number instead of auto search (6-9, A)")
     sp.add_argument("--pids", help="OBD signals, comma-separated (default: speed,rpm,throttle,...)")
     sp.add_argument("--can", action="store_true", help="also listen to the CAN bus")
     sp.add_argument("--can-ids", help="only these CAN ids, e.g. 025,1A0 (implies --can)")
@@ -657,8 +730,17 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--minutes", type=float)
     sp.add_argument("--out", help="folder to write (default ~/.car-use/recordings/<UTC time>)")
     sp.add_argument("--label", help="a name for this car or drive, e.g. car-3")
-    sp.add_argument("--decode", metavar="DBC",
+    sp.add_argument("--decode", metavar="DBC|j1939",
                     help="also write signals.csv in real units with this map (see car-use dbc list)")
+    sp.add_argument("--sign", action="store_true",
+                    help="hash-chain the files as they are written and sign a manifest "
+                         "(needs car-use[sign]); check later with car-use verify")
+    sp.add_argument("--asset", help="for --sign: an asset id for the machine, e.g. a fleet number")
+    sp = sub.add_parser("verify")
+    sp.add_argument("folder")
+    sp.add_argument("--key", help="require this signer: public key hex or device fingerprint")
+    sp.add_argument("--json", action="store_true")
+    sub.add_parser("key")
     sp = sub.add_parser("dbc")
     sp.add_argument("action", choices=["list", "show", "decode"])
     sp.add_argument("target", nargs="?", help="DBC name (show) or recording folder (decode)")
@@ -734,6 +816,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_record(args)
     if args.cmd == "audit":
         return cmd_audit(args)
+    if args.cmd == "verify":
+        return cmd_verify(args)
+    if args.cmd == "key":
+        return cmd_key(args)
     if args.cmd == "dbc":
         return cmd_dbc(args)
     if args.cmd == "control":
@@ -747,7 +833,7 @@ def main(argv: list[str] | None = None) -> int:
     if sys.stdin.isatty():
         print(USAGE)
         return 0
-    return run_script(sys.stdin.read(), _device(args))
+    return run_script(sys.stdin.read(), _device(args), listen_only=args.listen_only)
 
 
 if __name__ == "__main__":

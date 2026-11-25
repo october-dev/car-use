@@ -115,6 +115,22 @@ Every row has a UTC timestamp, so it lines up with a dashcam. The folder keeps t
 
 car-use bundles 20 DBC maps from comma's [opendbc](https://github.com/commaai/opendbc) (MIT): Hyundai / Kia, Toyota, Honda, the VW group, MG, BYD, Tesla, Nissan, Mazda, GM and Subaru. When one fits, `can-check` says so (`layout: looks like Hyundai / Kia`) and names each signal it finds, and `record --decode` writes steering angle, brake, speed and indicators in real units. `car-use dbc list` shows them all. Indian-market models such as Maruti Suzuki, Tata and Mahindra have no published map yet; Port reports are how we build them.
 
+### Trucks and machines (J1939)
+
+Trucks, cranes, diggers, tractors and generators talk SAE J1939. car-use listens and decodes the standard values (engine speed, coolant, oil pressure, engine hours, fuel, speed, battery, ambient temperature) and active fault codes (DM1), including multi-packet ones:
+
+```bash
+car-use can-check --sim crane-j1939                  # a virtual truck-mounted crane
+car-use can-check --j1939                            # a real machine, 250 kbit/s
+car-use record --j1939 --decode j1939 --minutes 30   # signals.csv and faults.csv
+```
+
+So far this has only been tested against the simulator, not on real heavy equipment. Details: [docs/j1939.md](docs/j1939.md).
+
+### Signed recordings
+
+`car-use record --sign` hash-chains the files as they're written and signs a manifest with this computer's Ed25519 key. Later, `car-use verify FOLDER` says whether it's intact, or which file and chunk changed. The key is a file on this computer, not a secure element. Needs `pip install 'car-use[sign]'`. Details: [docs/signed-recordings.md](docs/signed-recordings.md).
+
 ### Motion control (off by default)
 
 car-use can also steer, accelerate and brake supported cars through opendbc and a [comma panda](https://github.com/commaai/panda). It is off for every car until you turn it on yourself:
@@ -160,6 +176,7 @@ PY
 | `two-ecu` | Engine and transmission both answer. Codes stay with the ECU that sent them. | Medium |
 | `open-bus` | The OBD port carries the car's own CAN traffic. Find steering, brake and indicator with `can-check --find`. | Medium |
 | `hyundai-bus` | Same idea, laid out exactly like opendbc's Hyundai / Kia map, so `can-check` names the layout and `record --decode` reads real units. | Medium |
+| `crane-j1939` | Illustrative truck-mounted crane on J1939. Coolant high and oil pressure low, with two active faults sent as a multi-packet DM1. | Medium |
 
 Each virtual car can also pretend to be a different adapter: a genuine ELM327, a cheap clone, or an OBDLink. Run one as a Wi-Fi adapter with `car-use sim p0171 --port 35000` and point any OBD app at it. You can write your own in `~/.car-use/scenarios/`.
 
@@ -205,7 +222,7 @@ Readings use standard [COVESA VSS](https://covesa.github.io/vehicle_signal_speci
 | **Adapters** | Wi-Fi and USB ELM327 (clones too), OBDLink | Bluetooth adapters, CAN adapters (CANable, PCAN, comma panda) |
 | **Cars** | OBD-II cars, petrol and diesel, CAN and older protocols. Listening to the CAN bus on the OBD port | Maker-specific data packs, EV battery data, Tesla, Smartcar |
 | **Motorsport** | Any car with an OBD port. TunerStudio .ini files and engine logs (.msl, CSV) | Live data from Speeduino, rusEFI and MegaSquirt ECUs, a virtual copy of your ECU to test changes on, lap coaching |
-| **More than cars** | | Cranes, diggers, generators and trucks (J1939), GPS trackers, makers' fleet systems |
+| **More than cars** | J1939 trucks and machines: standard values and fault codes, listening only (simulator-tested) | Real-machine testing, CANopen and ISOBUS, GPS trackers, makers' fleet systems |
 | **Agents** | Claude Code, Codex, any agent with a shell | MCP server, OpenClaw and Hermes plugins, [car to car](https://agentintercom.org) |
 
 Most "ELM327" adapters sold online are cheap clones that pretend to be a newer version. car-use is built for them, and `car-use dongle-doctor` tells you what you really bought:
@@ -246,6 +263,7 @@ car-use can only read your car unless you allow more. Steering, gas and brakes s
 - **Read-only to start.** It can look at your car's data but can't change anything. Coding, flashing and controlling parts are always refused.
 - **You stay in control.** Nothing changes unless you switch it on yourself, at your own computer, and say yes each time. Your agent can't do that for you.
 - **Motion control is opt-in, per car.** Only through a comma panda and opendbc's safety limits, only while you have cruise control engaged, and any touch of the brake, gas or wheel stops it.
+- **Listening sends nothing.** Sessions on trucks and machines (J1939) are listen-only by default, and car sessions are with `--listen-only`: car-use then refuses every command that could transmit. On today's adapters that is car-use's software, helped by the adapter's silent monitoring, not a hardware guarantee. [What enforces it](docs/port-check.md#listen-only-mode).
 - **Everything is logged.** Every action goes into a log that can't be secretly edited. Check it with `car-use audit --verify`.
 - **Never allowed.** Turning off emissions systems, changing the odometer or messing with keys.
 

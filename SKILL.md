@@ -1,6 +1,6 @@
 ---
 name: car-use
-description: "Read and diagnose a real car through an OBD-II adapter (USB, Wi-Fi; BLE soon), or a virtual car from the built-in simulator: live signals, trouble codes, readiness monitors, freeze frames, VIN, adapter grading."
+description: "Read and diagnose a real car through an OBD-II adapter (USB, Wi-Fi; BLE soon), or a virtual car from the built-in simulator: live signals, trouble codes, readiness monitors, freeze frames, VIN, adapter grading. Also listens to J1939 trucks and heavy machines (cranes, diggers, generators): engine data and DM1 fault codes."
 ---
 
 # car-use
@@ -52,6 +52,7 @@ The person plugs things in and turns keys. You never ask them to do anything whi
 - `clear_dtcs()`: tier T1D. See Consent.
 - `listen(seconds=3, ids=None)`: listen to the CAN bus on the OBD port. Sends nothing to the car. Returns a capture: `.summary()` gives `verdict` (`open`: the car's own traffic reaches the port; `partial`: a few ids; `hidden`: silent, likely a gateway; `not_can`; `adapter_cannot_listen`), the ids heard with counts, and `buffer_full` (an ELM327 overflows on a busy bus, so the capture is a sample). `.frames` has `.id`, `.data`, `.wall`. Pass `ids=["025", "1A0"]` to hear only those, at a much better rate.
 - `can_layout(capture)`: which bundled DBC map (from comma's opendbc, 20 maps: Hyundai/Kia, Toyota, Honda, VW group, MG, BYD, Tesla, Nissan, Mazda, GM, Subaru) best explains a capture, with `confidence` `strong` or `weak` and the columns it can decode. `decode(capture, dbc="auto")` turns the frames into rows of `speed_kph`, `steering_angle_deg`, `steering_torque`, `brake_pressed`, `gas_pedal`, `left_blinker`, `right_blinker`. Only trust `auto` on a strong match.
+- `j1939(seconds=5, capture=None)`: listen to a J1939 bus (trucks, buses, cranes, construction and farm machines, generators) and decode it. Listening sends nothing (the first connection of a car session still searches the protocol and reads the VIN; on a machine run with `CAR_USE_PROTOCOL=A car-use --listen-only`). Returns `j1939` (is it J1939?), `why`, `signals` (`engine_speed_rpm`, `coolant_temp_c`, `oil_pressure_kpa`, `engine_hours_h`, `fuel_level_pct`, `fuel_rate_lph`, `vehicle_speed_kph`, `battery_v`, `ambient_temp_c`, each with `value`, `unit`, `spn`, `pgn`, `source`), `dm1` per source address (lamps and faults) and a flat `faults` list (`spn`, `fmi`, `occurrences`, `text`, `source`). `value=None` means the machine sent "not available" or "error". Pass `capture=listen(10)` to decode a capture you already have.
 - `control(device=None)`: motion control, tier T4. See Motion control below; don't use it unless the owner asks.
 - `describe_dtc("P0420")`, `dongle_doctor()`, `scenarios()`.
 - `maker_info()`: what car-use knows about this car's maker (looked up from the VIN, or pass a make). Protocols, the dealer tool, known patterns. Facts are tagged `[verified]`, `[common]` or `[unverified]`. Treat `[unverified]` as a lead and say so if you use it. Also on the command line: `car-use maker toyota`.
@@ -86,6 +87,28 @@ Common aliases:
 - `car-use record` logs OBD readings (`--pids`) and CAN frames (`--can`, or `--can-ids` for the ids `can-check` found) to CSV with UTC timestamps, for lining up with a dashcam. Set it up before the car moves. Never interact with the person while they drive.
 - To share results, `car-use can-check --report --model "..."` prints anonymised JSON (WMI and model year, never the VIN) for a Port report issue.
 - When a bundled opendbc map fits, `can-check` prints `layout: looks like ...` and names each lead's signal (for example `SAS11.SAS_Angle`). Then `car-use record --decode <dbc>` writes `signals.csv` with steering angle, brake, speed and indicators in real units, listening only to the messages those live on. `car-use dbc decode FOLDER --dbc NAME` decodes an earlier recording. `layout: a weak match` means a few ids happen to coincide; don't call it that car.
+
+## Listen-only
+
+- J1939 sessions (`--j1939`, trucks and machines) are listen-only by default; car sessions are listen-only with `--listen-only`. A listen-only session puts nothing on the bus: no protocol search, no VIN or rpm request, and every command that could transmit is refused. The output says `mode: listen-only` and whether the adapter confirmed silent monitoring. Report that as it is. On ELM327 and OBDLink adapters the guarantee is car-use's software, helped by the adapter not acknowledging frames; it is not a hardware lock. Don't describe it as one.
+- Listen-only uses protocol 6 (CAN 500 kbit/s) unless told otherwise. If a car sounds `hidden`, it may be on another speed: try `--protocol 8` (250 kbit/s), or `--no-listen-only` to let car-use search. Searching sends OBD requests, which are reads (T0).
+- `car-use --listen-only <<'PY'` runs a script with the same rule: `read()`, `dtcs()`, `raw_obd()`, `clear_dtcs()` and `control()` raise instead of transmitting. `listen()` and `j1939()` work.
+- Each session's mode goes into the audit log. Never try to get around a `ListenOnlyError`. Tell the person what you wanted to send and let them decide whether to reconnect without `--listen-only`.
+
+## Trucks and heavy machines (J1939)
+
+- Trucks, buses, cranes, excavators, tractors and generator sets usually talk SAE J1939 (29-bit CAN, mostly 250 kbit/s) on a 9-pin Deutsch connector, not OBD-II. Mode 01 readings, `dtcs()` and `vin_info()` don't apply. Listen instead.
+- `car-use can-check --j1939` (ELM327 protocol A; auto search never finds it) prints `bus: J1939`, the decoded values with their SPN and source address, and each ECU's DM1 faults. For scripts, `CAR_USE_PROTOCOL=A car-use --listen-only <<'PY'` uses J1939 for that run, then `j1939()`. Don't `config set protocol A`: it sticks, and later car sessions would connect as J1939. Practise with `--sim crane-j1939`.
+- `car-use record --j1939 --decode j1939` writes `signals.csv` (one column per SPN) and `faults.csv` (a row each time an ECU's fault list changes).
+- A fault is SPN + FMI. Say both, with the text car-use gives (e.g. "SPN 110 coolant temperature, FMI 16: above normal, moderately severe"). Then check it against the live value (`coolant_temp_c`). An SPN car-use doesn't name is maker-specific: give the number and suggest the maker's documentation. Don't guess.
+- The machine's operator stays in charge. Never ask anyone to operate a crane, boom, outrigger or attachment to produce data, and never suggest anything while a load is lifted. car-use only reads J1939; it has no write path for machines.
+- This has been tested only against the simulator. If a real machine's values look wrong, say so rather than trusting them.
+
+## Signed recordings
+
+- `car-use record --sign [--asset ID]` hash-chains each file as it's written and signs a manifest with this computer's Ed25519 key. It needs `pip install 'car-use[sign]'`; if that's missing, car-use says so before recording.
+- `car-use verify FOLDER` prints `intact` or `tampered` with the exact file and chunk (byte range, time). The exit code is 0 or 1. `--key FINGERPRINT` requires a specific signer, and `car-use key` shows this computer's fingerprint.
+- Be precise about what it means: the files haven't changed since this key signed them. It doesn't mean the data is true, and the key is a file on this computer, not a secure element. Don't call it tamper-proof evidence.
 
 ## Used-car checks
 
@@ -128,6 +151,7 @@ car-use can send steering, gas and brake commands through comma's opendbc and a 
 ## Limits (this version)
 
 - OBD-II Mode 01/02/03/07/09/0A and Mode 22 reads through `raw_obd`. No BLE yet.
+- J1939: nine standard SPNs and DM1 (with BAM transport) only. No requests (so no DM2 or on-request HOURS), no RTS/CTS transport, no proprietary PGNs. Tested against the simulator, not on real heavy equipment.
 - Listening (`listen`, `can-check`, `record --can`) uses the adapter's monitor mode on the standard CAN pins. Classic CAN only, not CAN FD. Message ids and byte positions differ per car; `can-check --find` finds candidates, and decodes units only when a bundled opendbc map fits. Indian-market models (Maruti Suzuki, Tata, Mahindra) have no map yet.
 - Motion control has been tested against the simulator and against opendbc's own car code, not yet on a real car with a panda. It needs Python 3.12 and `pip install "pandacan @ git+https://github.com/commaai/panda"`.
 - KWP2000, ISO 9141-2 and J1850 cars (older Maruti, many pre-2008 cars) are read like CAN cars, but so far only against the simulator's `kwp2000` and `iso9141` virtual cars, not real ones. Connecting can take several seconds longer than on CAN.

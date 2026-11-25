@@ -7,6 +7,7 @@ import tomllib
 from . import paths
 
 KEYS = {"device": "Adapter URL: tcp://192.168.0.10:35000, serial:///dev/cu.X?baud=38400, sim:p0420",
+        "protocol": "ELM327 protocol to use instead of auto search. A = SAE J1939 (trucks, machines).",
         "control_max_kph": "Motion control (T4): no gas commands at or above this speed. Default 40."}
 
 

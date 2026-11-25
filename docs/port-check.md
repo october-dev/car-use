@@ -65,7 +65,39 @@ A gateway still passes diagnostic questions. Steering angle can often be read fr
 - A cheap ELM327 overflows on a busy bus (`BUFFER FULL`) and has to restart, so it hears a sample of the bus, not every frame. `can-check` says when that happened. Listening to a few chosen ids (`car-use record --can-ids 025,1A0`) lets even a slow adapter keep up.
 - Cars without stability control (ESP) often have no steering angle sensor at all. Brake switch and wheel speeds are on almost every CAN car.
 - Some makers put a second bus on other OBD pins (Ford's MS-CAN on pins 3 and 11). car-use listens on the standard CAN pins 6 and 14 only.
+- Trucks and machines (J1939): `car-use can-check --j1939`. See [j1939.md](j1939.md).
 - Only listen. Don't send random messages to a car's bus. A generic scan tool has been reported to upset a steering angle sensor.
+
+## Listen-only mode
+
+J1939 sessions (`--j1939` or protocol A) are **listen-only by default**. On a car, pass `--listen-only` (to `can-check`, or to `record --can`). In a listen-only session car-use puts nothing on the bus:
+
+- No automatic protocol search and no VIN request, because both are OBD requests. The protocol is set by number instead: 6 (CAN 11-bit, 500 kbit/s, most cars since 2008) unless you pass `--protocol` or `--j1939` (or `CAR_USE_PROTOCOL=...` for one run). With the default, a car on another speed sounds `hidden`. The simulator knows each virtual car's bus and uses it.
+- No rpm check, so `engine_running` is unknown. On a J1939 machine it comes from engine speed on the bus.
+- Every command that could make the adapter transmit is refused before it reaches the adapter: OBD requests, `raw_obd`, `clear_dtcs`, `control()`, `ATSP0`, `AT CSM0`, `STCMM 1`. car-use only lets through a short list of adapter commands that can't transmit (reset, formatting, protocol by number, filters, silent monitoring on, voltage).
+- The audit log records each session's mode (`car-use audit`): `listen-only` or `obd-requests`, and what the adapter confirmed.
+
+Without it, a car session does the auto search, VIN and rpm check; `--no-listen-only` does the same on a J1939 session. These are read requests, so they are still tier T0. `record --pids` sends OBD requests by nature, so it isn't listen-only unless you ask, and `--listen-only --pids` is refused. Scripts can run with `car-use --listen-only <<'PY'`. To change the default for every session, the owner sets `[can] listen_only = true` (or `false`) in `~/.car-use/policy.toml`.
+
+### What enforces it, honestly
+
+On every adapter car-use supports today, listen-only is enforced by car-use's software, and only partly by the adapter.
+
+| adapter | what car-use asks for | what the hardware does |
+| --- | --- | --- |
+| OBDLink (STN11xx/STN21xx) | `STCMM 0` (receive only) and `AT CSM1` | Doesn't acknowledge frames while monitoring. It can still transmit when commanded; car-use refuses to command it. |
+| Genuine ELM327 v1.4b or newer | `AT CSM1` (silent monitoring, the default) | Same: no acknowledgements while monitoring, normal node otherwise. |
+| ELM327 clones | `AT CSM1`, often rejected | Many clones are always silent while monitoring, but car-use can't confirm it, so it reports "enforced by car-use only". |
+
+On all three, the chip itself can transmit, and it acknowledges replies after any request. The only thing stopping it in a listen-only session is car-use refusing to send. That's software, so a modified copy of car-use, or another program using the adapter, could transmit.
+
+Hardware that can't transmit at all:
+
+- **comma panda** in its `SILENT` safety mode puts its CAN controller into bus-monitoring mode, so it sends no acknowledgements and no frames. car-use doesn't listen through a panda yet; it only uses one for motion control.
+- **SocketCAN** interfaces (CANable, PCAN and similar on Linux) support `ip link set can0 type can bitrate 250000 listen-only on` where the driver does, which configures the controller itself. car-use doesn't support these adapters yet.
+- **Listen-only transceivers and contactless (clamp) readers** make transmitting physically impossible. That is where a car-use device is headed; it isn't built.
+
+Even with these, the host can usually switch the mode back. Only a transceiver with no transmit path is a real guarantee.
 
 ## What's known so far
 
