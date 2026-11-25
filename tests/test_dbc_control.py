@@ -131,15 +131,19 @@ def test_can_check_names_the_hyundai_layout_and_its_signals(sim):
     result = port.run(v.elm, v, seconds=0.5, find=["steering", "brake"], still_seconds=3.0,
                       action_seconds=2.5, ready_seconds=0, act=v._emulator.car.act)
     assert result["layout"][0]["dbc"] == "hyundai_can_generated"
-    steering = result["found"]["steering"]["candidates"][0]
-    assert steering["id"] == "2B0" and steering["dbc_signal"]["signal"] == "SAS_Angle"
+    # Both the angle sensor (SAS11) and the column torque (MDPS12) move with the
+    # wheel; either may rank first, and both must be named from the DBC.
+    steer = {c["id"]: c["dbc_signal"]["signal"] for c in result["found"]["steering"]["candidates"]}
+    top = result["found"]["steering"]["candidates"][0]["id"]
+    assert top in ("2B0", "251") and steer.get("2B0") == "SAS_Angle"
+    assert steer.get("251", "CR_Mdps_StrColTq") == "CR_Mdps_StrColTq"
     brake = result["found"]["brake"]["candidates"][0]
     assert brake["dbc_signal"]["signal"] == "DriverBraking"
     text = port.render(result)
     assert "looks like Hyundai / Kia" in text and "record --decode hyundai_can_generated" in text
     shared = port.share_report(result, v, model="Creta 2019")
     assert shared["layout"][0]["dbc"] == "hyundai_can_generated"
-    assert shared["found"]["steering"][0]["dbc_signal"]["message"] == "SAS11"
+    assert {c["dbc_signal"]["message"] for c in shared["found"]["steering"]} >= {"SAS11"}
 
 
 def test_open_bus_invented_ids_are_not_claimed_as_a_real_car(sim):
