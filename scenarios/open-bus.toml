@@ -123,7 +123,7 @@ data = "8130000000000000"
 [[bus.frames.fields]]
 byte = 1
 value = 48
-jitter = 0.6
+jitter = 0.8
 
 # Lights and doors.
 [[bus.frames]]

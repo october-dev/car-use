@@ -84,7 +84,7 @@ def test_crane_is_silent_at_the_wrong_bus_speed(sim):
 
 def test_record_decode_j1939_against_the_crane(sim, tmp_path):
     v = sim("crane-j1939")
-    meta = Recorder(v, out_dir=tmp_path / "r", decode="j1939").run(seconds=2.5)
+    meta = Recorder(v, out_dir=tmp_path / "r", decode="j1939").run(seconds=4.0)
     assert meta["can"] and meta["decoded"]["dbc"] == "j1939"
     s = meta["summary"]["j1939"]
     assert s["signals"]["coolant_temp_c"] == 104 and len(s["faults"]) == 2

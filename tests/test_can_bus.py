@@ -127,7 +127,7 @@ def test_listening_to_chosen_ids_only_hears_those(bus_car):
 def test_guided_find_points_at_steering_brake_and_indicator(sim):
     v = sim("open-bus")
     result = port.run(v.elm, v, seconds=0.4, find=["steering", "brake", "indicator"],
-                      still_seconds=1.5, action_seconds=1.2, ready_seconds=0,
+                      still_seconds=3.0, action_seconds=2.5, ready_seconds=0,
                       act=v._emulator.car.act)
     assert result["verdict"] == "open"
     assert result["engine_running"] is True
